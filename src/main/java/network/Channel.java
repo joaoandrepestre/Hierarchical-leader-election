@@ -5,54 +5,65 @@ import akka.actor.Props;
 import akka.actor.UntypedAbstractActor;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
+
+import java.util.LinkedList;
 import java.util.Queue;
-import java.lang.Math;
 
 import events.*;
 
-public class Channel extends UntypedAbstractActor{
-    public Node sender;
-    public Node receiver;
+class MessageForwarding extends Thread {
+    public Channel channel;
+
+    public MessageForwarding(Channel c) {
+        channel = c;
+    }
+
+    public void run() {
+        while (channel.status == 1) {
+            Update message;
+            if (!channel.messageQueue.isEmpty()) {
+                message = channel.messageQueue.poll();
+                channel.receiver.tell(message, channel.getSelf());
+            }
+            // wait some time?
+        }
+    }
+}
+
+public class Channel extends UntypedAbstractActor {
+    public ActorRef sender;
+    public ActorRef receiver;
     public int status;
     public Queue<Update> messageQueue;
 
-    public Channel(Node s, Node r,int st){
+    public Channel(ActorRef s, ActorRef r, int st) {
         sender = s;
         receiver = r;
         status = st;
-        messageQueue = new Queue<Update>();
+        messageQueue = new LinkedList<Update>();
     }
 
-    public Props createActor(Node s, Node r,int st){
-        return Props.create(Channel.class, ()->{
-            return new Channel(Node s, Node r,int st);
+    public static Props createActor(ActorRef s, ActorRef r, int st) {
+        return Props.create(Channel.class, () -> {
+            return new Channel(s, r, st);
         });
     }
 
-    private void whileUp(){
-        while(status == 1){
-            Update message = messageQueue.poll();
-            receiver.tell(message, getSelf());
-            //wait some time?
-        }
-    }
-
     @Override
-    public void onReceive(Object message){
-        if(message instanceof ChannelDown){
+    public void onReceive(Object message) {
+        if (message instanceof ChannelDown) {
             status = 0;
-            messageQueue = new Queue<Update>();
+            messageQueue = new LinkedList<Update>();
             receiver.tell(message, getSelf());
-        }
-        else if(message instanceof ChannelUp){
+        } else if (message instanceof ChannelUp) {
             status = 1;
-            whileUp();
+            new MessageForwarding(this).start();
             receiver.tell(message, getSelf());
-        }
-        else if(message instanceof Update){
-            if(status == 1) messageQueue.add(message);
-        }
-        else{
+        } else if (message instanceof Update) {
+            Update u = (Update) message;
+            if (status == 1)
+                messageQueue.add(u);
+        } else {
             // error?
         }
 

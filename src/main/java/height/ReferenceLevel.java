@@ -27,4 +27,8 @@ public class ReferenceLevel {
     public ReferenceLevel startNewRefLevelLocal(int t, int oid){
         return new ReferenceLevel(t, oid, 0, 1);
     }
+
+    public String toString(){
+        return "("+timestamp+","+originId+","+reflected+","+localHops+")";
+    }
 }

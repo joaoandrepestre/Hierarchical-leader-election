@@ -8,4 +8,8 @@ public class LocalLeaderPair {
         negativeTimestamp = nllts;
         localLeaderId = llid;
     }
+
+    public String toString(){
+        return "("+negativeTimestamp+","+localLeaderId+")";
+    }
 }

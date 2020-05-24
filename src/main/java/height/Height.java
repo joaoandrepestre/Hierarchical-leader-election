@@ -8,12 +8,16 @@ public class Height {
     public LocalLeaderPair llp;
     public int nodeId;
 
-    public Height(int nglts, int glid, int nllts, int llid, int id){
+    public Height(int gd, int nglts, int glid, int ld, int nllts, int llid, int id){
         rl = new ReferenceLevel();
-        globalDelta = 0;
+        globalDelta = gd;
         glp = new GlobalLeaderPair(nglts, glid);
-        localDelta = 0;
+        localDelta = ld;
         llp = new LocalLeaderPair(nllts, llid);
         nodeId = id;
+    }
+
+    public String toString(){
+        return "("+rl+","+globalDelta+","+glp+","+localDelta+","+llp+","+nodeId+")";
     }
 }

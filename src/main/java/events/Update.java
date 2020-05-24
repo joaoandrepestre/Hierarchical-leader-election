@@ -6,7 +6,8 @@ public class Update extends Event{
 
     public Height height;
 
-    public Update(Height h){
+    public Update(int t, Height h){
+        super(t);
         height = h;
     }
 }

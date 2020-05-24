@@ -8,4 +8,8 @@ public class GlobalLeaderPair {
         negativeTimestamp = nglts;
         globalLeaderId = glid;
     }
+
+    public String toString(){
+        return "("+negativeTimestamp+","+globalLeaderId+")";
+    }
 }
