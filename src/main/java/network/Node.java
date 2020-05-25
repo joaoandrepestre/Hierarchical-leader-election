@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.lang.Math;
 
 import height.Height;
+import height.LeaderPair;
 import height.ReferenceLevel;
 import events.*;
 
@@ -69,9 +70,9 @@ public class Node extends UntypedAbstractActor {
             sendToForming(heights[nodeId]);
         } else if (isSink()) {
             if (nodeId == localLeaderId)
-                startNewRefLevelGlobal();
+                heights[nodeId].startNewReferenceLevelGlobal(causalClock, nodeId);
             else
-                startNewRefLevelLocal();
+                heights[nodeId].startNewReferenceLevelLocal(causalClock, nodeId);
             sendToAll(heights[nodeId]);
         }
     }
@@ -83,21 +84,21 @@ public class Node extends UntypedAbstractActor {
 
     private void handleUpdate(Update u) {
         Height h = u.height;
-        heights[h.nodeId] = h;
+        heights[h.nodeId] = h.copy();
         addNeighbor(h.nodeId);
-        Height myOldHeight = heights[nodeId];
-        ReferenceLevel neighborsRL;
-        if (myOldHeight.glp == h.glp) { // same global leaders
-            if (myOldHeight.llp == h.llp) { // same local leaders
+        Height myOldHeight = heights[nodeId].copy();
+        ReferenceLevel neighborsRL = h.rl;
+        if (myOldHeight.globalLeaderPair.compareTo(h.globalLeaderPair) == 0) { // same global leaders
+            if (myOldHeight.localLeaderPair.compareTo(h.localLeaderPair) == 0) { // same local leaders
                 if (isSink()) {
                     if (h.rl.reflected == 0 && h.rl.localHops > MAX_HOPS) { // local search has gone too far
-                        reflectReferenceLevel();
+                        heights[nodeId].reflectReferenceLevel();
                     } else if (nodeId == localLeaderId && h.rl.localHops > 0) { // local search found global leader
-                        startNewRefLevelGlobal();
-                    } else if ((neighborsRL = getNeighborsRL()) != null) { // neighbors have the same RL
+                        heights[nodeId].startNewReferenceLevelGlobal(causalClock, nodeId);
+                    } else if (neighborsHaveSameRL(neighborsRL)) { // neighbors have the same RL
                         if (neighborsRL.timestamp > 0 && neighborsRL.reflected == 0) { // search hasn't been reflected
                                                                                        // yet
-                            reflectReferenceLevel();
+                            heights[nodeId].reflectReferenceLevel();
                         } else if (neighborsRL.timestamp > 0 && neighborsRL.reflected == 1
                                 && neighborsRL.originId == nodeId) { // search has been reflected and it was started by
                                                                      // this node
@@ -108,9 +109,9 @@ public class Node extends UntypedAbstractActor {
                             }
                         } else { // the search has been relfected and this node didn't start it
                             if (nodeId == localLeaderId) {
-                                startNewRefLevelGlobal();
+                                heights[nodeId].startNewReferenceLevelGlobal(causalClock, nodeId);
                             } else {
-                                startNewRefLevelLocal();
+                                heights[nodeId].startNewReferenceLevelLocal(causalClock, nodeId);
                             }
                         }
                     } else { // neighbors have different RL
@@ -121,21 +122,21 @@ public class Node extends UntypedAbstractActor {
                 if (nodeId != localLeaderId && !localLeadersInNeighborhood()) {
                     electSelfLocal();
                 } else {
-                    adoptLLPIfPriority();
+                    adoptLLPIfPriority(h.nodeId);
                 }
             }
         } else { // different global leaders
-            adoptGLPIfPriority();
+            adoptGLPIfPriority(h.nodeId);
         }
 
-        if (myOldHeight != heights[nodeId]) {
+        if (myOldHeight.compareTo(heights[nodeId]) != 0) {
             sendToAll(heights[nodeId]);
         }
     }
 
     private boolean localLeadersInNeighborhood() {
         for (Height h : heights) {
-            if (h != null && h!=heights[nodeId] && h.localDelta + 1 <= MAX_HOPS) {
+            if (h != null && h != heights[nodeId] && h.localDelta + 1 <= MAX_HOPS) {
                 return true;
             }
         }
@@ -143,11 +144,12 @@ public class Node extends UntypedAbstractActor {
     }
 
     private boolean isSink() {
-        boolean isSink = (nodeId==globalLeaderId);
-        for(Height h: heights){
-            if(h != null && h!=heights[nodeId]){
-                isSink = isSink && (h.glp == heights[nodeId].glp) && (heights[nodeId].compareTo(h)<0);
-                if(!isSink){
+        boolean isSink = (nodeId == globalLeaderId);
+        for (Height h : heights) {
+            if (h != null && h != heights[nodeId]) {
+                isSink = isSink && (h.globalLeaderPair.compareTo(heights[nodeId].globalLeaderPair) == 0)
+                        && (heights[nodeId].compareTo(h) < 0);
+                if (!isSink) {
                     return false;
                 }
             }
@@ -155,32 +157,89 @@ public class Node extends UntypedAbstractActor {
         return true;
     }
 
-    private ReferenceLevel getNeighborsRL() {
-        return null;
+    private boolean neighborsHaveSameRL(ReferenceLevel rl) {
+        for (Height h : heights) {
+            if (h != null && h != heights[nodeId] && h.rl.compareTo(rl) != 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void propagateLargestRL() {
-    }
-
-    private void reflectReferenceLevel() {
-    }
-
-    private void startNewRefLevelGlobal() {
-    }
-
-    private void startNewRefLevelLocal() {
+        ReferenceLevel rl = new ReferenceLevel();
+        for (Height h : heights) {
+            if (h != null && h != heights[nodeId]) {
+                if (nodeId == localLeaderId && h.rl.localHops == 0 && h.rl.compareTo(rl) > 0) {
+                    rl = h.rl;
+                } else if (h.rl.compareTo(rl) > 0) {
+                    rl = h.rl;
+                }
+            }
+        }
+        int gdelta = 0;
+        int ldelta = 0;
+        for (Height h : heights) {
+            if (h != null && h != heights[nodeId]) {
+                if (h.rl.compareTo(rl) == 0) {
+                    if (h.globalDelta < gdelta)
+                        gdelta = h.globalDelta;
+                    if (h.localDelta < ldelta)
+                        ldelta = h.localDelta;
+                }
+            }
+        }
+        heights[nodeId].rl = rl.copy();
+        if (rl.localHops > 0) {
+            heights[nodeId].rl.localHops++;
+            heights[nodeId].localDelta = ldelta - 1;
+        } else {
+            heights[nodeId].globalDelta = gdelta - 1;
+        }
     }
 
     private void electSelfGlobal() {
+        heights[nodeId].electGlobal(causalClock, nodeId);
+        globalLeaderId = nodeId;
+        localLeaderId = nodeId;
     }
 
     private void electSelfLocal() {
+        heights[nodeId].electLocal(causalClock, nodeId);
+        localLeaderId = nodeId;
     }
 
-    private void adoptGLPIfPriority() {
+    private void adoptGLPIfPriority(int neighborId) {
+        Height h = heights[neighborId];
+        if (h.globalLeaderPair.compareTo(heights[nodeId].globalLeaderPair) < 0) {
+            LeaderPair llp = heights[nodeId].localLeaderPair;
+            int ldelta = heights[nodeId].localDelta;
+            heights[nodeId] = h.copy();
+            heights[nodeId].globalDelta++;
+            heights[nodeId].localLeaderPair = llp;
+            heights[nodeId].localDelta = ldelta;
+            heights[nodeId].nodeId = nodeId;
+            globalLeaderId = h.globalLeaderPair.leaderId;
+        }else{
+            sendMessage(neighbors[neighborId], heights[nodeId]);
+        }
     }
 
-    private void adoptLLPIfPriority() {
+    private void adoptLLPIfPriority(int neighborId) {
+        Height h = heights[neighborId];
+        if ((h.localDelta + 1 < heights[nodeId].localDelta)
+                || ((h.localDelta + 1 == heights[nodeId].localDelta)
+                        && (h.globalDelta + 1 < heights[nodeId].globalDelta))
+                || ((h.localDelta + 1 == heights[nodeId].localDelta)
+                        && (h.globalDelta + 1 == heights[nodeId].globalDelta)
+                        && h.localLeaderPair.compareTo(heights[nodeId].localLeaderPair) < 0)) {
+            heights[nodeId] = h.copy();
+            heights[nodeId].globalDelta++;
+            heights[nodeId].localDelta++;
+            heights[nodeId].nodeId = nodeId;
+        }else{
+            sendMessage(neighbors[neighborId], heights[nodeId]);
+        }
     }
 
     private void sendMessage(ActorRef target, Height height) {
@@ -214,14 +273,19 @@ public class Node extends UntypedAbstractActor {
     @Override
     public void onReceive(Object message) {
         Event e = (Event) message;
-        log.info("Message received with timestamp {} from {}", e.timestamp, getSender().path().name());
         causalClock = Math.max(causalClock, e.timestamp) + 1;
         if (e instanceof ChannelDown) {
-            handleChannelDown((ChannelDown) e);
+            ChannelDown chdown = (ChannelDown) e;
+            log.info("[{}]: ChannelDown received with timestamp {} from {}", nodeId , e.timestamp, chdown.neighborId);
+            handleChannelDown(chdown);
         } else if (e instanceof ChannelUp) {
-            handleChannelUp((ChannelUp) e);
+            ChannelUp chup = (ChannelUp) e;
+            log.info("[{}]: ChannelUp received with timestamp {} from {}", nodeId , e.timestamp, chup.neighborId);
+            handleChannelUp(chup);
         } else if (e instanceof Update) {
-            handleUpdate((Update) e);
+            Update u = (Update) e;
+            log.info("[{}]: Update received with timestamp {} from {}", nodeId , e.timestamp, u.height.nodeId);
+            handleUpdate(u);
         } else {
             // error?
         }

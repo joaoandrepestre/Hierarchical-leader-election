@@ -1,8 +1,11 @@
+import java.io.IOException;
+import java.util.Scanner;
+
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
-import events.ChannelUp;
+import events.*;
 import network.*;
 
 public class Main {
@@ -37,13 +40,31 @@ public class Main {
 		}
 	}
 
+	public void dropChannel(int i, int j){
+		channels[i][j].tell(new ChannelDown(0, channels[j][i], i), ActorRef.noSender());
+		channels[j][i].tell(new ChannelDown(0, channels[i][j], j), ActorRef.noSender());
+
+	}
+
+	public void terminate() {
+		system.terminate();
+	}
+
 	public static void main(String[] args) {
-		int[][] topologyGraph = { { 0, 1, 1, 0, 0, 0 }, { 1, 0, 1, 1, 0, 0 }, { 1, 1, 0, 0, 1, 0 },
-				{ 0, 1, 0, 0, 1, 0 }, { 0, 0, 1, 1, 0, 1 }, { 0, 0, 0, 0, 1, 0 } };
+		int[][] topologyGraph = { { 0, 1, 1, 0, 0, 0 }, 
+								  { 1, 0, 1, 1, 0, 0 }, 
+								  { 1, 1, 0, 0, 1, 0 },
+								  { 0, 1, 0, 0, 1, 0 }, 
+								  { 0, 0, 1, 1, 0, 1 }, 
+								  { 0, 0, 0, 0, 1, 0 } };
 		int[] globalDeltas = { 3, 3, 2, 2, 1, 0 };
 		int[] localDeltas = { 1, 1, 0, 2, 1, 0 };
 		int[] localLeaders = { 2, 2, 2, 5, 5, 5 };
 		Main m = new Main(topologyGraph, globalDeltas, 5, localDeltas, localLeaders);
-		// system.terminate();
+		Scanner scanner = new Scanner(System.in);
+		scanner.nextLine();
+		//m.dropChannel(0, 2);
+		scanner.nextLine();
+		m.terminate();
 	}
 }
