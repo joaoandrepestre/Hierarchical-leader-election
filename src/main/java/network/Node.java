@@ -13,7 +13,7 @@ import height.ReferenceLevel;
 import events.*;
 
 public class Node extends UntypedAbstractActor {
-    private final int MAX_HOPS = 2; 
+    private final int MAX_HOPS = 2;
     private int nodeId;
     private ActorRef[] forming;
     private ActorRef[] neighbors;
@@ -134,11 +134,25 @@ public class Node extends UntypedAbstractActor {
     }
 
     private boolean localLeadersInNeighborhood() {
+        for (Height h : heights) {
+            if (h != null && h!=heights[nodeId] && h.localDelta + 1 <= MAX_HOPS) {
+                return true;
+            }
+        }
         return false;
     }
 
     private boolean isSink() {
-        return false;
+        boolean isSink = (nodeId==globalLeaderId);
+        for(Height h: heights){
+            if(h != null && h!=heights[nodeId]){
+                isSink = isSink && (h.glp == heights[nodeId].glp) && (heights[nodeId].compareTo(h)<0);
+                if(!isSink){
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private ReferenceLevel getNeighborsRL() {
@@ -176,20 +190,22 @@ public class Node extends UntypedAbstractActor {
 
     private void sendToNeihgbors(Height height) {
         for (ActorRef target : neighbors) {
-            sendMessage(target, height);
+            if (target != null)
+                sendMessage(target, height);
         }
     }
 
     private void sendToForming(Height height) {
         for (ActorRef target : forming) {
-            sendMessage(target, height);
+            if (target != null)
+                sendMessage(target, height);
         }
     }
 
     private void sendToAll(Height height) {
         sendToNeihgbors(height);
         for (ActorRef target : forming) {
-            if (!Arrays.asList(neighbors).contains(target)) {
+            if (target != null && !Arrays.asList(neighbors).contains(target)) {
                 sendMessage(target, height);
             }
         }

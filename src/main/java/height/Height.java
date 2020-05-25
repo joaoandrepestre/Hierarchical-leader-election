@@ -1,6 +1,6 @@
 package height;
 
-public class Height {
+public class Height implements Comparable {
     public ReferenceLevel rl;
     public int globalDelta;
     public GlobalLeaderPair glp;
@@ -19,5 +19,11 @@ public class Height {
 
     public String toString(){
         return "("+rl+","+globalDelta+","+glp+","+localDelta+","+llp+","+nodeId+")";
+    }
+
+    @Override
+    public int compareTo(Object o) {
+        // TODO Auto-generated method stub
+        return 0;
     }
 }
