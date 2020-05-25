@@ -16,7 +16,8 @@ public class Main {
 		channels = new ActorRef[topologyGraph.length][topologyGraph.length];
 
 		for (int i = 0; i < topologyGraph.length; i++) {
-			nodes[i] = system.actorOf(Node.createActor(i, globalDeltas[i], globalLeader, localDeltas[i], localLeaders[i], 6), "n" + i);
+			nodes[i] = system.actorOf(
+					Node.createActor(i, globalDeltas[i], globalLeader, localDeltas[i], localLeaders[i], 6), "n" + i);
 		}
 
 		for (int i = 0; i < topologyGraph.length; i++) {
@@ -37,15 +38,11 @@ public class Main {
 	}
 
 	public static void main(String[] args) {
-		int[][] topologyGraph = {{0,1,1,0,0,0},
-								 {1,0,1,1,0,0},
-								 {1,1,0,0,1,0},
-								 {0,1,0,0,1,0},
-								 {0,0,1,1,0,1},
-								 {0,0,0,0,1,0}};
-		int[] globalDeltas = {3, 3, 2, 2, 1, 0};
-		int[] localDeltas = {1, 1, 0, 2, 1, 0};
-		int[] localLeaders = {2,2,2,5,5,5};
+		int[][] topologyGraph = { { 0, 1, 1, 0, 0, 0 }, { 1, 0, 1, 1, 0, 0 }, { 1, 1, 0, 0, 1, 0 },
+				{ 0, 1, 0, 0, 1, 0 }, { 0, 0, 1, 1, 0, 1 }, { 0, 0, 0, 0, 1, 0 } };
+		int[] globalDeltas = { 3, 3, 2, 2, 1, 0 };
+		int[] localDeltas = { 1, 1, 0, 2, 1, 0 };
+		int[] localLeaders = { 2, 2, 2, 5, 5, 5 };
 		Main m = new Main(topologyGraph, globalDeltas, 5, localDeltas, localLeaders);
 		// system.terminate();
 	}

@@ -5,14 +5,15 @@ import akka.actor.Props;
 import akka.actor.UntypedAbstractActor;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.lang.Math;
 
 import height.Height;
+import height.ReferenceLevel;
 import events.*;
 
 public class Node extends UntypedAbstractActor {
+    private final int MAX_HOPS = 2; 
     private int nodeId;
     private ActorRef[] forming;
     private ActorRef[] neighbors;
@@ -65,17 +66,13 @@ public class Node extends UntypedAbstractActor {
         removeNeighbor(chdown.channel, chdown.neighborId);
         if (Arrays.asList(neighbors).isEmpty()) {
             electSelfGlobal();
-            for (ActorRef node : forming) {
-                sendMessage(node, heights[nodeId]);
-            }
+            sendToForming(heights[nodeId]);
         } else if (isSink()) {
             if (nodeId == localLeaderId)
                 startNewRefLevelGlobal();
             else
                 startNewRefLevelLocal();
-            for (ActorRef node : neighbors) {
-                sendMessage(node, heights[nodeId]);
-            }
+            sendToAll(heights[nodeId]);
         }
     }
 
@@ -88,10 +85,70 @@ public class Node extends UntypedAbstractActor {
         Height h = u.height;
         heights[h.nodeId] = h;
         addNeighbor(h.nodeId);
+        Height myOldHeight = heights[nodeId];
+        ReferenceLevel neighborsRL;
+        if (myOldHeight.glp == h.glp) { // same global leaders
+            if (myOldHeight.llp == h.llp) { // same local leaders
+                if (isSink()) {
+                    if (h.rl.reflected == 0 && h.rl.localHops > MAX_HOPS) { // local search has gone too far
+                        reflectReferenceLevel();
+                    } else if (nodeId == localLeaderId && h.rl.localHops > 0) { // local search found global leader
+                        startNewRefLevelGlobal();
+                    } else if ((neighborsRL = getNeighborsRL()) != null) { // neighbors have the same RL
+                        if (neighborsRL.timestamp > 0 && neighborsRL.reflected == 0) { // search hasn't been reflected
+                                                                                       // yet
+                            reflectReferenceLevel();
+                        } else if (neighborsRL.timestamp > 0 && neighborsRL.reflected == 1
+                                && neighborsRL.originId == nodeId) { // search has been reflected and it was started by
+                                                                     // this node
+                            if (neighborsRL.localHops == 0) {
+                                electSelfGlobal();
+                            } else {
+                                electSelfLocal();
+                            }
+                        } else { // the search has been relfected and this node didn't start it
+                            if (nodeId == localLeaderId) {
+                                startNewRefLevelGlobal();
+                            } else {
+                                startNewRefLevelLocal();
+                            }
+                        }
+                    } else { // neighbors have different RL
+                        propagateLargestRL();
+                    }
+                }
+            } else { // different local leaders
+                if (nodeId != localLeaderId && !localLeadersInNeighborhood()) {
+                    electSelfLocal();
+                } else {
+                    adoptLLPIfPriority();
+                }
+            }
+        } else { // different global leaders
+            adoptGLPIfPriority();
+        }
+
+        if (myOldHeight != heights[nodeId]) {
+            sendToAll(heights[nodeId]);
+        }
+    }
+
+    private boolean localLeadersInNeighborhood() {
+        return false;
     }
 
     private boolean isSink() {
         return false;
+    }
+
+    private ReferenceLevel getNeighborsRL() {
+        return null;
+    }
+
+    private void propagateLargestRL() {
+    }
+
+    private void reflectReferenceLevel() {
     }
 
     private void startNewRefLevelGlobal() {
@@ -101,12 +158,41 @@ public class Node extends UntypedAbstractActor {
     }
 
     private void electSelfGlobal() {
+    }
 
+    private void electSelfLocal() {
+    }
+
+    private void adoptGLPIfPriority() {
+    }
+
+    private void adoptLLPIfPriority() {
     }
 
     private void sendMessage(ActorRef target, Height height) {
         causalClock++;
         target.tell(new Update(causalClock, height), getSelf());
+    }
+
+    private void sendToNeihgbors(Height height) {
+        for (ActorRef target : neighbors) {
+            sendMessage(target, height);
+        }
+    }
+
+    private void sendToForming(Height height) {
+        for (ActorRef target : forming) {
+            sendMessage(target, height);
+        }
+    }
+
+    private void sendToAll(Height height) {
+        sendToNeihgbors(height);
+        for (ActorRef target : forming) {
+            if (!Arrays.asList(neighbors).contains(target)) {
+                sendMessage(target, height);
+            }
+        }
     }
 
     @Override
