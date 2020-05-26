@@ -12,4 +12,8 @@ public class ChannelDown extends Event {
         channel = c;
         neighborId = nid;
     }
+
+    public String toString(){
+        return "ChannelDown("+timestamp+","+neighborId+")";
+    }
 }

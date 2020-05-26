@@ -13,4 +13,8 @@ public class ChannelUp extends Event {
         neighborId = nid;
     }
 
+    public String toString(){
+        return "ChannelUp("+timestamp+","+neighborId+")";
+    }
+
 }

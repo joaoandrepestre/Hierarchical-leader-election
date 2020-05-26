@@ -5,4 +5,8 @@ public class Event {
     public Event(int t){
         timestamp = t;
     }
+
+    public String toString(){
+        return "Event("+timestamp+")";
+    }
 }

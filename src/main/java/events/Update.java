@@ -10,4 +10,8 @@ public class Update extends Event{
         super(t);
         height = h;
     }
+
+    public String toString(){
+        return "Update("+timestamp+","+height+")";
+    }
 }

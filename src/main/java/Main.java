@@ -20,7 +20,7 @@ public class Main {
 
 		for (int i = 0; i < topologyGraph.length; i++) {
 			nodes[i] = system.actorOf(
-					Node.createActor(i, globalDeltas[i], globalLeader, localDeltas[i], localLeaders[i], 6), "n" + i);
+					Node.createActor(i, globalDeltas[i], globalLeader, localDeltas[i], localLeaders[i], topologyGraph.length), "n" + i);
 		}
 
 		for (int i = 0; i < topologyGraph.length; i++) {
@@ -40,7 +40,7 @@ public class Main {
 		}
 	}
 
-	public void dropChannel(int i, int j){
+	public void dropChannel(int i, int j) {
 		channels[i][j].tell(new ChannelDown(0, channels[j][i], i), ActorRef.noSender());
 		channels[j][i].tell(new ChannelDown(0, channels[i][j], j), ActorRef.noSender());
 
@@ -51,19 +51,25 @@ public class Main {
 	}
 
 	public static void main(String[] args) {
-		int[][] topologyGraph = { { 0, 1, 1, 0, 0, 0 }, 
-								  { 1, 0, 1, 1, 0, 0 }, 
-								  { 1, 1, 0, 0, 1, 0 },
-								  { 0, 1, 0, 0, 1, 0 }, 
-								  { 0, 0, 1, 1, 0, 1 }, 
-								  { 0, 0, 0, 0, 1, 0 } };
+
+		int[][] topologyGraph = { { 0, 1, 1, 0, 0, 0 }, { 1, 0, 1, 1, 0, 0 }, { 1, 1, 0, 0, 1, 0 },
+				{ 0, 1, 0, 0, 1, 0 }, { 0, 0, 1, 1, 0, 1 }, { 0, 0, 0, 0, 1, 0 } };
+
+		//int[][] topologyGraph = { { 0, 1, 1 }, 
+		//						  { 1, 0, 1 },
+		//						  { 1, 1, 0 } };
 		int[] globalDeltas = { 3, 3, 2, 2, 1, 0 };
+		//int[] globalDeltas = { 0, 1, 1 };
 		int[] localDeltas = { 1, 1, 0, 2, 1, 0 };
+		//int[] localDeltas = { 0, 1 , 1};
 		int[] localLeaders = { 2, 2, 2, 5, 5, 5 };
+		//int[] localLeaders = { 0, 0, 0 };
 		Main m = new Main(topologyGraph, globalDeltas, 5, localDeltas, localLeaders);
 		Scanner scanner = new Scanner(System.in);
 		scanner.nextLine();
-		//m.dropChannel(0, 2);
+		m.dropChannel(0, 2);
+		scanner.nextLine();
+		m.dropChannel(4, 5);
 		scanner.nextLine();
 		m.terminate();
 	}

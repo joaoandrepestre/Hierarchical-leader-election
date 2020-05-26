@@ -46,15 +46,16 @@ public class Height implements Comparable<Height> {
 
     public void startNewReferenceLevelLocal(int timestamp, int originId) {
         rl = new ReferenceLevel(timestamp, originId, 0, 1);
-        localDelta = Integer.MAX_VALUE;
+        localDelta = -1;
     }
 
-    public void reflectReferenceLevel() {
-        rl.reflect();
-        if (rl.localHops == 0) {
+    public void reflectReferenceLevel(ReferenceLevel rl) {
+        this.rl = rl.copy();
+        this.rl.reflect();
+        if (this.rl.localHops == 0) {
             globalDelta = 0;
         } else {
-            localDelta = 0;
+            localDelta = -1;
         }
     }
 
