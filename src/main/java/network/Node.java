@@ -9,22 +9,43 @@ import java.util.Arrays;
 import java.lang.Math;
 
 import height.Height;
-import height.LeaderPair;
 import height.ReferenceLevel;
 import events.*;
 
+/* 
+* Node class. Implements the computing node part of the network model. 
+* Receives messages from channels and runs the algorithm by handling this events
+*/
 public class Node extends UntypedAbstractActor {
-    private final int MAX_HOPS = 2;
-    private int nodeId;
-    private ActorRef[] forming;
-    private ActorRef[] neighbors;
-    private int globalLeaderId;
-    private int localLeaderId;
-    private int causalClock;
-    public Height[] heights;
+    private final int MAX_HOPS = 2; /* Constant maximum number of hops between any node and its local leader */
 
-    private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
+    private int nodeId; /* Id of the node */
+    private ActorRef[] forming; /* Set of channels that are up but that haven't sent any messages yet */
+    private ActorRef[] neighbors; /* Set of channels that are up and have sent messages */
+    private int globalLeaderId; /* Id of the global leader */
+    private int localLeaderId; /* Id of the local leader of this node */
+    private int causalClock; /* Causal clock used to time events. Lamport's logical clock algorithm used */
+    public Height[] heights; /* Set of heights of neighbor nodes */
 
+    private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this); /* Akka logger */
+
+    /*
+     * Constructor. Initializes the variables.
+     * 
+     * @param id Id of this node
+     * 
+     * @param gd Number of hops from this node to the global leader in initial
+     * configuration
+     * 
+     * @param glid Initial global leader id
+     * 
+     * @param ld Number os hops from this node to its local leader in initial
+     * configuration
+     * 
+     * @param llid Initial local leader id
+     * 
+     * @param networkSize Number of nodes in the network
+     */
     public Node(int id, int gd, int glid, int ld, int llid, int networkSize) {
         nodeId = id;
         forming = new ActorRef[networkSize];
@@ -37,17 +58,48 @@ public class Node extends UntypedAbstractActor {
         log.info("Created node {} with height {}", nodeId, heights[nodeId]);
     }
 
+    /*
+     * Creates an actor of type Node in the akka system.
+     * 
+     * @param id Id of this node
+     * 
+     * @param gd Number of hops from this node to the global leader in initial
+     * configuration
+     * 
+     * @param glid Initial global leader id
+     * 
+     * @param ld Number os hops from this node to its local leader in initial
+     * configuration
+     * 
+     * @param llid Initial local leader id
+     * 
+     * @param size Number of nodes in the network
+     * 
+     * @return Props object of the created actor
+     */
     public static Props createActor(int id, int gd, int glid, int ld, int llid, int size) {
         return Props.create(Node.class, () -> {
             return new Node(id, gd, glid, ld, llid, size);
         });
     }
 
+    /*
+     * Adds the channel to the forming set.
+     * 
+     * @param channel Channel to the discovered neighbor node
+     * 
+     * @param neighborId Id of the discovered neighbor node
+     */
     private void addForming(ActorRef channel, int neighborId) {
         if (forming[neighborId] == null)
             forming[neighborId] = channel;
     }
 
+    /*
+     * Moves a channel from the forming set to the neighbor set.
+     * 
+     * @param neighborId Id of the neighbor
+     */
     private void addNeighbor(int neighborId) {
         if (forming[neighborId] != null && neighbors[neighborId] == null) {
             neighbors[neighborId] = forming[neighborId];
@@ -55,6 +107,11 @@ public class Node extends UntypedAbstractActor {
         }
     }
 
+    /*
+     * Removes the channel from forming and neighbor sets.
+     * 
+     * @param neighborId Id of the neighbor removed
+     */
     private void removeNeighbor(int neighborId) {
         if (forming[neighborId] != null)
             forming[neighborId] = null;
@@ -63,9 +120,15 @@ public class Node extends UntypedAbstractActor {
         heights[neighborId] = null;
     }
 
+    /*
+     * ChannelDown handler. Removes the neighbor and checks if there is a path to
+     * the leader. If there isn't, starts a search.
+     * 
+     * @param chdown The ChannelDown event
+     */
     private void handleChannelDown(ChannelDown chdown) {
         removeNeighbor(chdown.neighborId);
-        if (!hasNeighbors() && (nodeId!=globalLeaderId)) {
+        if (!hasNeighbors() && (nodeId != globalLeaderId)) {
             log.info("\n[{}]: No neighbors, electing self...", getSelf().path().name());
             electSelfGlobal();
             sendToForming(heights[nodeId]);
@@ -81,11 +144,34 @@ public class Node extends UntypedAbstractActor {
         }
     }
 
+    /*
+     * ChannelUp handler. Adds the neighbor to the forming set and sends an update
+     * of its height
+     * 
+     * @param chup The ChannelUp event
+     */
     private void handleChannelUp(ChannelUp chup) {
         addForming(chup.channel, chup.neighborId);
         sendMessage(chup.channel, heights[nodeId]);
     }
 
+    /*
+     * SetUp handler. Adds the neighbor to the forming set, moves it to the neighbor
+     * set and saves the neighbors height in the height set.
+     * 
+     * @param sup The SetUp event
+     */
+    private void handleSetUp(SetUp sup) {
+        addForming(sup.channel, sup.neighborId);
+        addNeighbor(sup.neighborId);
+        heights[sup.neighborId] = sup.height.copy();
+    }
+
+    /*
+     * Update handler. Moves the neighbor to the neighbor set, saves its height in
+     * height set and decides how to change its own height based on the algortihm.
+     * If the height was changed, sends an update to neighbors.
+     */
     private void handleUpdate(Update u) {
         Height h = u.height;
         heights[h.nodeId] = h.copy();
@@ -133,7 +219,8 @@ public class Node extends UntypedAbstractActor {
                             }
                         }
                     } else { // neighbors have different RL
-                        log.info("\n[{}]: Neighbors have different RL, propagating largest...", getSelf().path().name());
+                        log.info("\n[{}]: Neighbors have different RL, propagating largest...",
+                                getSelf().path().name());
                         propagateLargestRL();
                     }
                 }
@@ -157,6 +244,13 @@ public class Node extends UntypedAbstractActor {
         }
     }
 
+    /*
+     * Checks if the neighbors set is not empty.
+     * 
+     * @return true if at least one element of neighbors is not null
+     * 
+     * @return false otherwise
+     */
     private boolean hasNeighbors() {
         for (ActorRef channel : neighbors) {
             if (channel != null)
@@ -165,29 +259,51 @@ public class Node extends UntypedAbstractActor {
         return false;
     }
 
+    /*
+     * Checks if neighbors know of a local leader less than MAX_HOPS away.
+     * 
+     * @return true if there is at least one local leader within MAX_HOPS
+     * 
+     * @return false otherwise
+     */
     private boolean localLeadersInNeighborhood() {
         for (Height h : heights) {
-            if (h != null && h != heights[nodeId] && h.localDelta>=0 && h.localDelta + 1 <= MAX_HOPS) {
+            if (h != null && h != heights[nodeId] && h.localDelta >= 0 && h.localDelta + 1 <= MAX_HOPS) {
                 return true;
             }
         }
         return false;
     }
 
+    /*
+     * Checks if the node has no outgoing links.
+     * 
+     * @return true if the node is not a global leader and is the lowest among its
+     * neighbors
+     * 
+     * @return false otherwise
+     */
     private boolean isSink() {
         boolean isSink = (nodeId != globalLeaderId);
         for (Height h : heights) {
             if (h != null && h != heights[nodeId]) {
                 isSink = isSink && (h.globalLeaderPair.compareTo(heights[nodeId].globalLeaderPair) == 0)
                         && (heights[nodeId].compareTo(h) < 0);
-                if (!isSink) {
-                    return false;
-                }
+            }
+            if (!isSink) {
+                return false;
             }
         }
         return true;
     }
 
+    /*
+     * Check if all neighbors have the same ReferenceLevel.
+     * 
+     * @return true if all neighbors have the same RL
+     * 
+     * @return false otherwise
+     */
     private boolean neighborsHaveSameRL(ReferenceLevel rl) {
         for (Height h : heights) {
             if (h != null && h != heights[nodeId] && h.rl.compareTo(rl) != 0) {
@@ -197,6 +313,9 @@ public class Node extends UntypedAbstractActor {
         return true;
     }
 
+    /*
+     * Adopts the largest ReferenceLevel among its neighbors as its own.
+     */
     private void propagateLargestRL() {
         ReferenceLevel rl = new ReferenceLevel();
         for (Height h : heights) {
@@ -229,26 +348,36 @@ public class Node extends UntypedAbstractActor {
         }
     }
 
+    /*
+     * Redefine its global leader pair to elect itself as leader with causalClock as
+     * timestamp.
+     */
     private void electSelfGlobal() {
         heights[nodeId].electGlobal(causalClock, nodeId);
         globalLeaderId = nodeId;
         localLeaderId = nodeId;
     }
 
+    /*
+     * Redefine its local leader pair to elect itself as leader with causalClock as
+     * timestamp.
+     */
     private void electSelfLocal() {
         heights[nodeId].electLocal(causalClock, nodeId);
         localLeaderId = nodeId;
     }
 
+    /*
+     * Adopts the neighbor's global leader if its been elected more recently.
+     * 
+     * @param neighborId Id of the neighbor whose leader it may adopt
+     */
     private void adoptGLPIfPriority(int neighborId) {
         Height h = heights[neighborId];
         if (h.globalLeaderPair.compareTo(heights[nodeId].globalLeaderPair) < 0) {
-            LeaderPair llp = heights[nodeId].localLeaderPair;
-            int ldelta = heights[nodeId].localDelta;
             heights[nodeId] = h.copy();
             heights[nodeId].globalDelta++;
-            //heights[nodeId].localLeaderPair = llp;
-            heights[nodeId].localDelta++ /* = ldelta */;
+            heights[nodeId].localDelta++;
             heights[nodeId].nodeId = nodeId;
             globalLeaderId = h.globalLeaderPair.leaderId;
         } else {
@@ -256,28 +385,48 @@ public class Node extends UntypedAbstractActor {
         }
     }
 
+    /*
+     * Adopts the neighbor's local leader if it's closer than its own leader, of if
+     * it's closer to the global leader
+     * 
+     * @param neighborId Id of the neighbor whose leader it may adopt
+     */
     private void adoptLLPIfPriority(int neighborId) {
         Height h = heights[neighborId];
-        if ((h.localDelta + 1 < heights[nodeId].localDelta)
-                || ((h.localDelta + 1 == heights[nodeId].localDelta)
-                        && (h.globalDelta + 1 < heights[nodeId].globalDelta))
-                || ((h.localDelta + 1 == heights[nodeId].localDelta)
-                        && (h.globalDelta + 1 == heights[nodeId].globalDelta)
-                        && h.localLeaderPair.compareTo(heights[nodeId].localLeaderPair) < 0)) {
-            heights[nodeId] = h.copy();
-            heights[nodeId].globalDelta++;
-            heights[nodeId].localDelta++;
-            heights[nodeId].nodeId = nodeId;
+        if (h.localDelta >= 0 && h.globalDelta >= 0) {
+            if ((heights[nodeId].localDelta < 0) || (h.localDelta + 1 < heights[nodeId].localDelta)
+                    || ((h.localDelta + 1 == heights[nodeId].localDelta)
+                            && (h.globalDelta + 1 < heights[nodeId].globalDelta))
+                    || ((h.localDelta + 1 == heights[nodeId].localDelta)
+                            && (h.globalDelta + 1 == heights[nodeId].globalDelta)
+                            && h.localLeaderPair.compareTo(heights[nodeId].localLeaderPair) < 0)) {
+                heights[nodeId] = h.copy();
+                heights[nodeId].globalDelta++;
+                heights[nodeId].localDelta++;
+                heights[nodeId].nodeId = nodeId;
+            }
         } else {
             sendMessage(neighbors[neighborId], heights[nodeId]);
         }
     }
 
+    /*
+     * Sends an Update message to the target with the given height
+     * 
+     * @param target Channel to send the message to
+     * 
+     * @param height Height to send to target
+     */
     private void sendMessage(ActorRef target, Height height) {
         causalClock++;
         target.tell(new Update(causalClock, height), getSelf());
     }
 
+    /*
+     * Sends an Update message to all channels in the neighbor set
+     * 
+     * @height Height to send to neighbors
+     */
     private void sendToNeihgbors(Height height) {
         for (ActorRef target : neighbors) {
             if (target != null)
@@ -285,6 +434,11 @@ public class Node extends UntypedAbstractActor {
         }
     }
 
+    /*
+     * Sends an Update message to all channels in the forming set
+     * 
+     * @height Height to send to neighbors
+     */
     private void sendToForming(Height height) {
         for (ActorRef target : forming) {
             if (target != null)
@@ -292,6 +446,11 @@ public class Node extends UntypedAbstractActor {
         }
     }
 
+    /*
+     * Sends an Update message to all channels in the forming and neighbor sets
+     * 
+     * @height Height to send to neighbors
+     */
     private void sendToAll(Height height) {
         sendToNeihgbors(height);
         for (ActorRef target : forming) {
@@ -301,6 +460,10 @@ public class Node extends UntypedAbstractActor {
         }
     }
 
+    /*
+     * Logs the full state of the node. That is, its height, its forming and
+     * neighbor sets and its causal clock.
+     */
     public void logState() {
         String s = "Height: " + heights[nodeId] + "\n";
         s += "forming: ";
@@ -319,6 +482,11 @@ public class Node extends UntypedAbstractActor {
         log.info("\n[{}]: {}", getSelf().path().name(), s);
     }
 
+    /*
+     * Called when a message is received by the actor. Event handlers defined above.
+     * 
+     * @param message The received message
+     */
     @Override
     public void onReceive(Object message) {
         Event e = (Event) message;
@@ -338,8 +506,11 @@ public class Node extends UntypedAbstractActor {
             log.info("\n[{}]: Received {}", getSelf().path().name(), u);
             handleUpdate(u);
             logState();
-        } else {
-            // error?
+        } else if (e instanceof SetUp) {
+            SetUp sup = (SetUp) e;
+            log.info("\n[{}]: Received {}", getSelf().path().name(), sup);
+            handleSetUp(sup);
+            logState();
         }
     }
 }

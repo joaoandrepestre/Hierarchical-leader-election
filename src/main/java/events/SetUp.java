@@ -1,20 +1,26 @@
 package events;
 
 import akka.actor.ActorRef;
+import height.Height;
 
-/*
-ChannelDown event. Informs a node the channel is no longer active. 
- */
-public class ChannelDown extends Event {
+/* 
+SetUp event. Used for setting up the initial topology. 
+Behavior similar to ChannelUp, but stops the algorithm from running before the network is setup
+*/
+public class SetUp extends Event {
 
     public ActorRef channel; /*
                               * Mirrored channel. Node i will receive this event from Channelji. This
                               * variable will hold Channelij
                               */
     public int neighborId; /*
-                            * The disconnected neighbor. Node i will receive this event from Channelji. This
+                            * The disconnected neighbor. Node i will receive this event from Channelji This
                             * variable will hold the id of node j
                             */
+    public Height height; /*
+                           * Neighbors initial height.Node i will receive this event from Channelji This
+                           * variable will hold the height of node j
+                           */
 
     /*
      * Constructor. Initializes the variables
@@ -23,12 +29,15 @@ public class ChannelDown extends Event {
      * 
      * @param c Mirrored channel
      * 
-     * @param nid Neighbor id
+     * @param nid Neighbors id
+     * 
+     * @param h Neighbors height
      */
-    public ChannelDown(int t, ActorRef c, int nid) {
+    public SetUp(int t, ActorRef c, int nid, Height h) {
         super(t);
         channel = c;
         neighborId = nid;
+        height = h;
     }
 
     /*
@@ -37,6 +46,6 @@ public class ChannelDown extends Event {
      * @return The string representation
      */
     public String toString() {
-        return "ChannelDown(" + timestamp + "," + neighborId + ")";
+        return "SetUp(" + timestamp + "," + neighborId + ")";
     }
 }
