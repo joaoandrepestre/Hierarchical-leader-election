@@ -123,7 +123,7 @@ public class Main {
 		Scanner scanner = new Scanner(System.in);
 		
 		// Wait for the initial setup to finish (the actors will stop logging)
-		// Press any key to continue
+		// Press ENTER to continue
 		scanner.nextLine(); 
 		m.dropChannel(0, 1); // Dropping channel 0-1 should trigger a local search
 		
