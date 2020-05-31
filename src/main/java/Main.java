@@ -1,10 +1,10 @@
 import java.util.Scanner;
-
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import events.*;
 import height.Height;
 import network.*;
+import visualization.Visualization;
 
 /* 
 * Main class. Holds the full network and runs the Akka actor system. 
@@ -35,6 +35,7 @@ public class Main {
 	 * local leader for node i
 	 */
 	public Main(int[][] topologyGraph, int[] globalDeltas, int globalLeader, int[] localDeltas, int[] localLeaders) {
+		Visualization.main(new String[]{Visualization.class.getName()});
 		nodes = new ActorRef[topologyGraph.length];
 		channels = new ActorRef[topologyGraph.length][topologyGraph.length];
 		Height[] heights = new Height[topologyGraph.length];
