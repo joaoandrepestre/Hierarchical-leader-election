@@ -165,28 +165,28 @@ public class Channel extends UntypedAbstractActor {
             status = 0;
             messageQueue = new LinkedList<Update>();
             receiver.tell(message, getSelf());
-            //log.info("\n[{}]: Received {}", getSelf().path().name(), chdown);
-            //logState();
+            log.info("\n[{}]: Received {}", getSelf().path().name(), chdown);
+            logState();
         } else if (message instanceof ChannelUp) {
             ChannelUp chup = (ChannelUp) message;
             status = 1;
             mf.forward();
             receiver.tell(message, getSelf());
-            //log.info("\n[{}]: Received {}", getSelf().path().name(), chup);
-            //logState();
+            log.info("\n[{}]: Received {}", getSelf().path().name(), chup);
+            logState();
         } else if (message instanceof Update) {
             Update u = (Update) message;
             if (status == 1)
                 messageQueue.add(u);
-            //log.info("\n[{}]: Received {}", getSelf().path().name(), u);
-            //logState();
+            log.info("\n[{}]: Received {}", getSelf().path().name(), u);
+            logState();
         } else if (message instanceof SetUp) {
             SetUp sup = (SetUp) message;
             status = 1;
             mf.forward();
             receiver.tell(message, getSelf());
-            //log.info("\n[{}]: Received {}", getSelf().path().name(), sup);
-            //logState();
+            log.info("\n[{}]: Received {}", getSelf().path().name(), sup);
+            logState();
         }
 
     }

@@ -1,10 +1,12 @@
 package network;
 
 import akka.actor.ActorRef;
+import akka.actor.ActorSystem;
 import akka.actor.Props;
 import akka.actor.UntypedAbstractActor;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
+
 import java.util.Arrays;
 import java.lang.Math;
 
@@ -12,22 +14,86 @@ import height.Height;
 import height.ReferenceLevel;
 import events.*;
 
-/* 
-* Node class. Implements the computing node part of the network model. 
-* Receives messages from channels and runs the algorithm by handling this events
-*/
-public class Node extends UntypedAbstractActor {
-    private final int MAX_HOPS = 2; /* Constant maximum number of hops between any node and its local leader */
+class NodeActor extends UntypedAbstractActor {
 
-    private int nodeId; /* Id of the node */
-    private ActorRef[] forming; /* Set of channels that are up but that haven't sent any messages yet */
-    private ActorRef[] neighbors; /* Set of channels that are up and have sent messages */
-    private int globalLeaderId; /* Id of the global leader */
-    private int localLeaderId; /* Id of the local leader of this node */
-    private int causalClock; /* Causal clock used to time events. Lamport's logical clock algorithm used */
-    public Height[] heights; /* Set of heights of neighbor nodes */
+    private Node n;
 
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this); /* Akka logger */
+
+    public NodeActor(Node n){
+        this.n = n;
+        log.info("Created node {} with height {}", n.nodeId, n.heights[n.nodeId]);
+    }
+    
+    public static Props createActor(Node n) {
+        return Props.create(NodeActor.class, () -> {
+            return new NodeActor(n);
+        });
+    }
+
+    public void logState() {
+        String s = "Height: " + n.heights[n.nodeId] + "\n";
+        s += "forming: ";
+        for (ActorRef channel : n.forming) {
+            if (channel != null) {
+                s += channel.path().name() + "; ";
+            }
+        }
+        s += "\nneighbors: ";
+        for (ActorRef channel : n.neighbors) {
+            if (channel != null) {
+                s += channel.path().name() + "; ";
+            }
+        }
+        s += "\nClock: " + n.causalClock;
+        log.info("\n[{}]: {}", getSelf().path().name(), s);
+    }
+
+    @Override
+    public void onReceive(Object message) throws Throwable {
+        Event e = (Event) message;
+        n.causalClock = Math.max(n.causalClock, e.timestamp) + 1;
+        if (e instanceof ChannelDown) {
+            ChannelDown chdown = (ChannelDown) e;
+            log.info("\n[{}]: Received {}", getSelf().path().name(), chdown);
+            n.handleChannelDown(chdown);
+            logState();
+        } else if (e instanceof ChannelUp) {
+            ChannelUp chup = (ChannelUp) e;
+            log.info("\n[{}]: Received {}", getSelf().path().name(), chup);
+            n.handleChannelUp(chup);
+            logState();
+        } else if (e instanceof Update) {
+            Update u = (Update) e;
+            log.info("\n[{}]: Received {}", getSelf().path().name(), u);
+            n.handleUpdate(u);
+            logState();
+        } else if (e instanceof SetUp) {
+            SetUp sup = (SetUp) e;
+            log.info("\n[{}]: Received {}", getSelf().path().name(), sup);
+            n.handleSetUp(sup);
+            logState();
+        }
+    }
+
+}
+
+/*
+ * Node class. Implements the computing node part of the network model. Receives
+ * messages from channels and runs the algorithm by handling this events
+ */
+public class Node {
+    private final int MAX_HOPS = 2; /* Constant maximum number of hops between any node and its local leader */
+
+    public int nodeId; /* Id of the node */
+    public ActorRef[] forming; /* Set of channels that are up but that haven't sent any messages yet */
+    public ActorRef[] neighbors; /* Set of channels that are up and have sent messages */
+    public int globalLeaderId; /* Id of the global leader */
+    public int localLeaderId; /* Id of the local leader of this node */
+    public int causalClock; /* Causal clock used to time events. Lamport's logical clock algorithm used */
+    public Height[] heights; /* Set of heights of neighbor nodes */
+
+    public ActorRef nodeActor;
 
     /*
      * Constructor. Initializes the variables.
@@ -46,7 +112,7 @@ public class Node extends UntypedAbstractActor {
      * 
      * @param networkSize Number of nodes in the network
      */
-    public Node(int id, int gd, int glid, int ld, int llid, int networkSize) {
+    public Node(ActorSystem system, int id, int gd, int glid, int ld, int llid, int networkSize) {
         nodeId = id;
         forming = new ActorRef[networkSize];
         neighbors = new ActorRef[networkSize];
@@ -55,7 +121,8 @@ public class Node extends UntypedAbstractActor {
         causalClock = 0;
         heights = new Height[networkSize];
         heights[nodeId] = new Height(gd, -1, globalLeaderId, ld, -1, localLeaderId, nodeId);
-        log.info("Created node {} with height {}", nodeId, heights[nodeId]);
+
+        nodeActor = system.actorOf(NodeActor.createActor(this), "n"+nodeId);
     }
 
     /*
@@ -77,10 +144,14 @@ public class Node extends UntypedAbstractActor {
      * 
      * @return Props object of the created actor
      */
-    public static Props createActor(int id, int gd, int glid, int ld, int llid, int size) {
+    /* public static Props createActor(int id, int gd, int glid, int ld, int llid, int size) {
         return Props.create(Node.class, () -> {
             return new Node(id, gd, glid, ld, llid, size);
         });
+    } */
+
+    public Height getHeight() {
+        return heights[nodeId];
     }
 
     /*
@@ -126,18 +197,18 @@ public class Node extends UntypedAbstractActor {
      * 
      * @param chdown The ChannelDown event
      */
-    private void handleChannelDown(ChannelDown chdown) {
+    public void handleChannelDown(ChannelDown chdown) {
         removeNeighbor(chdown.neighborId);
         if (!hasNeighbors() && (nodeId != globalLeaderId)) {
-            log.info("\n[{}]: No neighbors, electing self...", getSelf().path().name());
+            //log.info("\n[{}]: No neighbors, electing self...", getSelf().path().name());
             electSelfGlobal();
             sendToForming(heights[nodeId]);
         } else if (isSink()) {
             if (nodeId == localLeaderId) {
-                log.info("\n[{}]: Is a sink and local leader, searching global", getSelf().path().name());
+                //log.info("\n[{}]: Is a sink and local leader, searching global", getSelf().path().name());
                 heights[nodeId].startNewReferenceLevelGlobal(causalClock, nodeId);
             } else {
-                log.info("\n[{}]: Is a sink, searching local", getSelf().path().name());
+                //log.info("\n[{}]: Is a sink, searching local", getSelf().path().name());
                 heights[nodeId].startNewReferenceLevelLocal(causalClock, nodeId);
             }
             sendToAll(heights[nodeId]);
@@ -150,7 +221,7 @@ public class Node extends UntypedAbstractActor {
      * 
      * @param chup The ChannelUp event
      */
-    private void handleChannelUp(ChannelUp chup) {
+    public void handleChannelUp(ChannelUp chup) {
         addForming(chup.channel, chup.neighborId);
         sendMessage(chup.channel, heights[nodeId]);
     }
@@ -161,7 +232,7 @@ public class Node extends UntypedAbstractActor {
      * 
      * @param sup The SetUp event
      */
-    private void handleSetUp(SetUp sup) {
+    public void handleSetUp(SetUp sup) {
         addForming(sup.channel, sup.neighborId);
         addNeighbor(sup.neighborId);
         heights[sup.neighborId] = sup.height.copy();
@@ -172,7 +243,7 @@ public class Node extends UntypedAbstractActor {
      * height set and decides how to change its own height based on the algortihm.
      * If the height was changed, sends an update to neighbors.
      */
-    private void handleUpdate(Update u) {
+    public void handleUpdate(Update u) {
         Height h = u.height;
         heights[h.nodeId] = h.copy();
         addNeighbor(h.nodeId);
@@ -181,26 +252,26 @@ public class Node extends UntypedAbstractActor {
         if (myOldHeight.globalLeaderPair.compareTo(h.globalLeaderPair) == 0) { // same global leaders
             if (myOldHeight.localLeaderPair.compareTo(h.localLeaderPair) == 0) { // same local leaders
                 if (isSink()) {
-                    log.info("\n[{}]: Is sink...", getSelf().path().name());
+                    //log.info("\n[{}]: Is sink...", getSelf().path().name());
                     if (h.rl.reflected == 0 && h.rl.localHops > MAX_HOPS) { // local search has gone too far
-                        log.info("\n[{}]: Local search gone too far, reflecting...", getSelf().path().name());
+                        //log.info("\n[{}]: Local search gone too far, reflecting...", getSelf().path().name());
                         heights[nodeId].reflectReferenceLevel(h.rl);
                     } else if (nodeId == localLeaderId && h.rl.localHops > 0) { // local search found global leader
-                        log.info("\n[{}]: Local search found a local leader, searching global...",
-                                getSelf().path().name());
+                        //log.info("\n[{}]: Local search found a local leader, searching global...",
+                        //        getSelf().path().name());
                         heights[nodeId].startNewReferenceLevelGlobal(causalClock, nodeId);
                     } else if (neighborsHaveSameRL(neighborsRL)) { // neighbors have the same RL
-                        log.info("\n[{}]: All neighbors have the same RL (dead end)...", getSelf().path().name());
+                        //log.info("\n[{}]: All neighbors have the same RL (dead end)...", getSelf().path().name());
                         if (neighborsRL.timestamp > 0 && neighborsRL.reflected == 0) { // search hasn't been reflected
                                                                                        // yet
-                            log.info("\n[{}]: The search has not been reflected, reflecting it...",
-                                    getSelf().path().name());
+                            //log.info("\n[{}]: The search has not been reflected, reflecting it...",
+                            //        getSelf().path().name());
                             heights[nodeId].reflectReferenceLevel(h.rl);
                         } else if (neighborsRL.timestamp > 0 && neighborsRL.reflected == 1
                                 && neighborsRL.originId == nodeId) { // search has been reflected and it was started by
                                                                      // this node
-                            log.info("\n[{}]: The reflected search has reached the origin, electing self...",
-                                    getSelf().path().name());
+                            //log.info("\n[{}]: The reflected search has reached the origin, electing self...",
+                            //        getSelf().path().name());
 
                             if (neighborsRL.localHops == 0) {
                                 electSelfGlobal();
@@ -208,9 +279,9 @@ public class Node extends UntypedAbstractActor {
                                 electSelfLocal();
                             }
                         } else { // the search has been relfected and this node didn't start it
-                            log.info(
-                                    "\n[{}]: There is no search happening, or a reflected search reached a second dead end, starting new search...",
-                                    getSelf().path().name());
+                            //log.info(
+                            //        "\n[{}]: There is no search happening, or a reflected search reached a second dead end, starting new search...",
+                            //        getSelf().path().name());
 
                             if (nodeId == localLeaderId) {
                                 heights[nodeId].startNewReferenceLevelGlobal(causalClock, nodeId);
@@ -219,23 +290,23 @@ public class Node extends UntypedAbstractActor {
                             }
                         }
                     } else { // neighbors have different RL
-                        log.info("\n[{}]: Neighbors have different RL, propagating largest...",
-                                getSelf().path().name());
+                        //log.info("\n[{}]: Neighbors have different RL, propagating largest...",
+                        //        getSelf().path().name());
                         propagateLargestRL();
                     }
                 }
             } else { // different local leaders
                 if (nodeId != localLeaderId && !localLeadersInNeighborhood()) {
-                    log.info("\n[{}]: Different local leaders, leaders far away, electing self...",
-                            getSelf().path().name());
+                    //log.info("\n[{}]: Different local leaders, leaders far away, electing self...",
+                    //        getSelf().path().name());
                     electSelfLocal();
                 } else {
-                    log.info("\n[{}]: Different local leaders, checking priority...", getSelf().path().name());
+                    //log.info("\n[{}]: Different local leaders, checking priority...", getSelf().path().name());
                     adoptLLPIfPriority(h.nodeId);
                 }
             }
         } else { // different global leaders
-            log.info("\n[{}]: Different global leaders, checking priority...", getSelf().path().name());
+            //log.info("\n[{}]: Different global leaders, checking priority...", getSelf().path().name());
             adoptGLPIfPriority(h.nodeId);
         }
 
@@ -419,7 +490,7 @@ public class Node extends UntypedAbstractActor {
      */
     private void sendMessage(ActorRef target, Height height) {
         causalClock++;
-        target.tell(new Update(causalClock, height), getSelf());
+        target.tell(new Update(causalClock, height), nodeActor);
     }
 
     /*
@@ -464,7 +535,7 @@ public class Node extends UntypedAbstractActor {
      * Logs the full state of the node. That is, its height, its forming and
      * neighbor sets and its causal clock.
      */
-    public void logState() {
+    /* public void logState() {
         String s = "Height: " + heights[nodeId] + "\n";
         s += "forming: ";
         for (ActorRef channel : forming) {
@@ -480,14 +551,14 @@ public class Node extends UntypedAbstractActor {
         }
         s += "\nClock: " + causalClock;
         log.info("\n[{}]: {}", getSelf().path().name(), s);
-    }
+    } */
 
     /*
      * Called when a message is received by the actor. Event handlers defined above.
      * 
      * @param message The received message
      */
-    @Override
+    /* @Override
     public void onReceive(Object message) {
         Event e = (Event) message;
         causalClock = Math.max(causalClock, e.timestamp) + 1;
@@ -512,5 +583,5 @@ public class Node extends UntypedAbstractActor {
             handleSetUp(sup);
             logState();
         }
-    }
+    } */
 }
