@@ -31,6 +31,10 @@ class NodeActor extends UntypedAbstractActor {
         });
     }
 
+    /*
+     * Logs the full state of the node. That is, its height, its forming and
+     * neighbor sets and its causal clock.
+     */
     public void logState() {
         String s = "Height: " + n.heights[n.nodeId] + "\n";
         s += "forming: ";
@@ -49,6 +53,11 @@ class NodeActor extends UntypedAbstractActor {
         log.info("\n[{}]: {}", getSelf().path().name(), s);
     }
 
+    /*
+     * Called when a message is received by the actor. Event handlers defined bellow.
+     * 
+     * @param message The received message
+     */
     @Override
     public void onReceive(Object message) throws Throwable {
         Event e = (Event) message;
@@ -124,31 +133,6 @@ public class Node {
 
         nodeActor = system.actorOf(NodeActor.createActor(this), "n"+nodeId);
     }
-
-    /*
-     * Creates an actor of type Node in the akka system.
-     * 
-     * @param id Id of this node
-     * 
-     * @param gd Number of hops from this node to the global leader in initial
-     * configuration
-     * 
-     * @param glid Initial global leader id
-     * 
-     * @param ld Number os hops from this node to its local leader in initial
-     * configuration
-     * 
-     * @param llid Initial local leader id
-     * 
-     * @param size Number of nodes in the network
-     * 
-     * @return Props object of the created actor
-     */
-    /* public static Props createActor(int id, int gd, int glid, int ld, int llid, int size) {
-        return Props.create(Node.class, () -> {
-            return new Node(id, gd, glid, ld, llid, size);
-        });
-    } */
 
     public Height getHeight() {
         return heights[nodeId];
@@ -530,58 +514,4 @@ public class Node {
             }
         }
     }
-
-    /*
-     * Logs the full state of the node. That is, its height, its forming and
-     * neighbor sets and its causal clock.
-     */
-    /* public void logState() {
-        String s = "Height: " + heights[nodeId] + "\n";
-        s += "forming: ";
-        for (ActorRef channel : forming) {
-            if (channel != null) {
-                s += channel.path().name() + "; ";
-            }
-        }
-        s += "\nneighbors: ";
-        for (ActorRef channel : neighbors) {
-            if (channel != null) {
-                s += channel.path().name() + "; ";
-            }
-        }
-        s += "\nClock: " + causalClock;
-        log.info("\n[{}]: {}", getSelf().path().name(), s);
-    } */
-
-    /*
-     * Called when a message is received by the actor. Event handlers defined above.
-     * 
-     * @param message The received message
-     */
-    /* @Override
-    public void onReceive(Object message) {
-        Event e = (Event) message;
-        causalClock = Math.max(causalClock, e.timestamp) + 1;
-        if (e instanceof ChannelDown) {
-            ChannelDown chdown = (ChannelDown) e;
-            log.info("\n[{}]: Received {}", getSelf().path().name(), chdown);
-            handleChannelDown(chdown);
-            logState();
-        } else if (e instanceof ChannelUp) {
-            ChannelUp chup = (ChannelUp) e;
-            log.info("\n[{}]: Received {}", getSelf().path().name(), chup);
-            handleChannelUp(chup);
-            logState();
-        } else if (e instanceof Update) {
-            Update u = (Update) e;
-            log.info("\n[{}]: Received {}", getSelf().path().name(), u);
-            handleUpdate(u);
-            logState();
-        } else if (e instanceof SetUp) {
-            SetUp sup = (SetUp) e;
-            log.info("\n[{}]: Received {}", getSelf().path().name(), sup);
-            handleSetUp(sup);
-            logState();
-        }
-    } */
 }
