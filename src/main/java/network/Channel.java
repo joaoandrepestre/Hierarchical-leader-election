@@ -160,14 +160,14 @@ public class Channel extends UntypedAbstractActor {
      */
     @Override
     public void onReceive(Object message) {
-        if (message instanceof ChannelDown) {
+        if (message instanceof ChannelDown && status == 1) {
             ChannelDown chdown = (ChannelDown) message;
             status = 0;
             messageQueue = new LinkedList<Update>();
             receiver.tell(message, getSelf());
             log.info("\n[{}]: Received {}", getSelf().path().name(), chdown);
             logState();
-        } else if (message instanceof ChannelUp) {
+        } else if (message instanceof ChannelUp && status == 0) {
             ChannelUp chup = (ChannelUp) message;
             status = 1;
             mf.forward();

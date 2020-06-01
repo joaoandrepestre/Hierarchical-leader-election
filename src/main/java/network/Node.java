@@ -430,10 +430,12 @@ public class Node {
     private void adoptGLPIfPriority(int neighborId) {
         Height h = heights[neighborId];
         if (h.globalLeaderPair.compareTo(heights[nodeId].globalLeaderPair) < 0) {
-            heights[nodeId] = h.copy();
-            heights[nodeId].globalDelta++;
-            heights[nodeId].localDelta++;
-            heights[nodeId].nodeId = nodeId;
+            heights[nodeId].rl = h.rl.copy();
+            heights[nodeId].globalDelta = h.globalDelta+1;
+            heights[nodeId].globalLeaderPair = h.globalLeaderPair.copy();
+            if(h.localDelta + 1 <= MAX_HOPS){
+                adoptLLPIfPriority(neighborId);
+            }
             globalLeaderId = h.globalLeaderPair.leaderId;
         } else {
             sendMessage(neighbors[neighborId], heights[nodeId]);
@@ -455,10 +457,10 @@ public class Node {
                     || ((h.localDelta + 1 == heights[nodeId].localDelta)
                             && (h.globalDelta + 1 == heights[nodeId].globalDelta)
                             && h.localLeaderPair.compareTo(heights[nodeId].localLeaderPair) < 0)) {
-                heights[nodeId] = h.copy();
-                heights[nodeId].globalDelta++;
-                heights[nodeId].localDelta++;
-                heights[nodeId].nodeId = nodeId;
+                heights[nodeId].rl = h.rl.copy();
+                heights[nodeId].localDelta = h.localDelta+1;
+                heights[nodeId].localLeaderPair = h.localLeaderPair.copy();
+                localLeaderId = h.localLeaderPair.leaderId;
             }
         } else {
             sendMessage(neighbors[neighborId], heights[nodeId]);

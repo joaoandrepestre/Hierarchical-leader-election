@@ -5,6 +5,7 @@ import height.Height;
 import network.Network;
 import network.Node;
 import processing.core.PApplet;
+import processing.core.PVector;
 
 /* 
 * Visualization class. Extension of processing's PApplet. 
@@ -13,7 +14,10 @@ import processing.core.PApplet;
 public class Visualization extends PApplet {
 
     public Network net; /* The network to draw */
-    public int clickCounter = 0;
+    public PVector[] points;
+    public boolean recording = false;
+    public int screenshotCounter = 0;
+    public int recordingCounter = 0;
 
     /*
      * Initial settings. Creates the window.
@@ -30,35 +34,52 @@ public class Visualization extends PApplet {
 
         // Example 1: The graph we discussed in our meetings
 
-        int[][] topologyGraph = { { 0, 1, 1, 0, 0, 0 }, 
-                                  { 1, 0, 1, 1, 0, 0 }, 
-                                  { 1, 1, 0, 0, 1, 0 },
-                                  { 0, 1, 0, 0, 1, 0 }, 
-                                  { 0, 0, 1, 1, 0, 1 }, 
-                                  { 0, 0, 0, 0, 1, 0 } };
+        int[][] topologyGraph = { { 0, 1, 1, 0, 0, 0 }, { 1, 0, 1, 1, 0, 0 }, { 1, 1, 0, 0, 1, 0 },
+                { 0, 1, 0, 0, 1, 0 }, { 0, 0, 1, 1, 0, 1 }, { 0, 0, 0, 0, 1, 0 } };
         int[] globalDeltas = { 3, 3, 2, 2, 1, 0 };
         int globalLeader = 5;
         int[] localDeltas = { 1, 1, 0, 2, 1, 0 };
         int[] localLeaders = { 2, 2, 2, 5, 5, 5 };
 
         // Exemple 2: Simpler 3 node clique, 0 is the only leader
-        /*int[][] topologyGraph = { { 0, 1, 1 }, 
-                                   { 1, 0, 1 }, 
-                                   { 1, 1, 0 } }; 
-         int[] globalDeltas = { 0, 1, 1 }; int globalLeader = 0; int[] localDeltas = { 0, 1, 1 }; 
-         int[] localLeaders = { 0, 0, 0 };*/
+        /*
+         * int[][] topologyGraph = { { 0, 1, 1 }, { 1, 0, 1 }, { 1, 1, 0 } }; int[]
+         * globalDeltas = { 0, 1, 1 }; int globalLeader = 0; int[] localDeltas = { 0, 1,
+         * 1 }; int[] localLeaders = { 0, 0, 0 };
+         */
 
         net = new Network(system, topologyGraph, globalDeltas, globalLeader, localDeltas, localLeaders);
+
+        float x, y, ang;
+        int n = topologyGraph.length;
+        float r = width / 5;
+        points = new PVector[n];
+        for (int i = 0; i < n; i++) {
+            ang = PI / 2 + i * (2 * PI / n);
+            x = width / 2 + r * cos(ang);
+            y = height / 2 - r * sin(ang);
+            points[i] = new PVector(x, y);
+        }
+    }
+
+    /*
+     * Checks if the points (x3,y3) is between (x1,y1) and (x2,y2)
+     */
+    public boolean pointBetweenPoints(PVector p1, PVector p2, PVector p3) {
+        float d = p1.dist(p3) + p3.dist(p2);
+        float d2 = p1.dist(p2);
+
+        return abs(d - d2) < 0.5;
     }
 
     /*
      * Draws an arrow from (x1,y1) to (x2,y2)
      */
-    public void drawArrow(float x1, float y1, float x2, float y2) {
-        line(x1, y1, x2, y2);
+    public void drawArrow(PVector p1, PVector p2) {
+        line(p1.x, p1.y, p2.x, p2.y);
         pushMatrix();
-        translate(x2, y2);
-        float a = atan2(x1 - x2, y2 - y1);
+        translate(p2.x, p2.y);
+        float a = atan2(p1.x - p2.x, p2.y - p1.y);
         rotate(a);
         line(0, 0, -10, -10);
         line(0, 0, 10, -10);
@@ -68,7 +89,12 @@ public class Visualization extends PApplet {
     /*
      * Draws an edge between the nodes at (x1, y1) and (x2, y2)
      */
-    public void drawEdge(float x1, float y1, float x2, float y2) {
+    public void drawEdge(PVector p1, PVector p2) {
+        float x1 = p1.x;
+        float y1 = p1.y;
+        float x2 = p2.x;
+        float y2 = p2.y;
+
         float deltaX = x2 - x1;
         float deltaY = y2 - y1;
         float L = sqrt(deltaX * deltaX + deltaY * deltaY);
@@ -77,7 +103,7 @@ public class Visualization extends PApplet {
         x2 = x2 - deltaX * 10 / L;
         y2 = y2 - deltaY * 10 / L;
 
-        drawArrow(x1, y1, x2, y2);
+        drawArrow(new PVector(x1, y1), new PVector(x2, y2));
     }
 
     /*
@@ -88,10 +114,8 @@ public class Visualization extends PApplet {
     public void drawNode(Node n) {
         int nodeColor = 255;
         int textColor = 0;
-        float r = width / 5;
-        float ang = PI / 2 + n.nodeId * (2 * PI / net.nodes.length);
-        float x = width / 2 + r * cos(ang);
-        float y = height / 2 - r * sin(ang);
+        float x = points[n.nodeId].x;
+        float y = points[n.nodeId].y;
         fill(255);
         if (n.nodeId == n.localLeaderId) {
             ellipse(x, y, 25, 25);
@@ -115,10 +139,7 @@ public class Visualization extends PApplet {
         }
         for (Height h : n.heights) {
             if (h != null && h.compareTo(n.getHeight()) < 0) {
-                ang = PI / 2 + h.nodeId * (2 * PI / net.nodes.length);
-                float x2 = width / 2 + r * cos(ang);
-                float y2 = height / 2 - r * sin(ang);
-                drawEdge(x, y, x2, y2);
+                drawEdge(points[n.nodeId], points[h.nodeId]);
             }
         }
     }
@@ -136,21 +157,36 @@ public class Visualization extends PApplet {
      * Key pressing handler.
      */
     public void keyPressed() {
-        if (key == ENTER) {
-            switch (clickCounter) {
-                case 0:
-                    net.dropChannel(0, 2);
-                    break;
-                case 1:
-                    net.dropChannel(4, 5);
-                    break;
-                case 2:
-                    net.remakeChannel(0, 2);
-                    break;
-                default:
-                    exit();
+        if (key == 'p' || key == 'P') {
+            save("screenshots/simulation" + screenshotCounter + ".png");
+            fill(255);
+            rect(0,0,width,height);
+            screenshotCounter++;
+        }
+        if (key == 'r' || key == 'R') {
+            recording = !recording;
+            if (!recording)
+                recordingCounter++;
+        }
+    }
+
+    public void mousePressed() {
+        PVector mouse = new PVector(mouseX, mouseY);
+        PVector p1;
+        PVector p2;
+        for (int i = 0; i < net.nodes.length; i++) {
+            p1 = points[i];
+            for (int j = 0; j < net.nodes.length; j++) {
+                if (i != j) {
+                    p2 = points[j];
+                    if (pointBetweenPoints(p1, p2, mouse)) {
+                        if (mouseButton == LEFT)
+                            net.dropChannel(i, j);
+                        if (mouseButton == RIGHT)
+                            net.remakeChannel(i, j);
+                    }
+                }
             }
-            clickCounter++;
         }
     }
 
@@ -161,6 +197,11 @@ public class Visualization extends PApplet {
     public void draw() {
         background(255);
         drawNetwork();
+        if (recording) {
+            saveFrame("recordings/simulation" + recordingCounter + "-######.png");
+            fill(255, 0, 0);
+            ellipse(width - 20, 20, 15, 15);
+        }
     }
 
 }
