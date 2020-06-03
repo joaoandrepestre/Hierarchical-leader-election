@@ -1,0 +1,47 @@
+<project name="HierarchicalLeaderElection">
+    <property name="source.dir" value="src"/>
+    <property name="lib.dir" value="lib"/>
+    <property name="class.dir" value="bin"/>
+    <property name="dist.dir" value="dist"/>
+    <property name="jar.file" value="${dist.dir}/${ant.project.name}.jar"/>
+    <property name="main-class" value="Main"/>
+
+    <path id="libraries.path">    
+        <fileset dir="${lib.dir}">
+            <include name="**/*.jar"/>
+        </fileset>
+    </path>
+
+
+    <target name="build">
+        <delete dir="${class.dir}"/>
+        <mkdir dir="${class.dir}"/>
+        <javac srcdir="${source.dir}" destdir="${class.dir}">
+            <classpath refid="libraries.path"/>
+        </javac>
+    </target>
+
+    <target name="run" depends="dist">
+        <java jar="${dist.dir}/${ant.project.name}.jar" fork="true"/>
+    </target>
+
+    <manifestclasspath property="manifest.classpath" jarfile="${jar.file}">
+        <classpath refid="libraries.path"/>
+    </manifestclasspath>
+
+    <target name="dist" depends="build">
+        <delete dir="${dist.dir}"/>
+        <mkdir dir="${dist.dir}"/>
+        <mkdir dir="${dist.dir}/${lib.dir}"/>
+        <copy todir="${dist.dir}/${lib.dir}" flatten="true">
+            <path refid="libraries.path"/>
+        </copy>
+        <jar destfile="${jar.file}" basedir="${class.dir}">
+            <manifest>
+                <attribute name="Class-Path" value="${manifest.classpath}"/>
+                <attribute name="Main-Class" value="${main-class}"/>
+            </manifest>
+        </jar>
+    </target>
+
+</project>

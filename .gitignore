@@ -1,8 +1,7 @@
-.gradle
 .vscode
-.classpath
-.settings
-.project
-target/
+
+bin/
+
+
 recordings/
 screenshots/
