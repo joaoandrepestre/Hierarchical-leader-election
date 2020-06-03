@@ -18,6 +18,9 @@ public class Visualization extends PApplet {
     public boolean recording = false;
     public int screenshotCounter = 0;
     public int recordingCounter = 0;
+    public int setUpStatus = 0;
+    public String numberOfNodesInput = "";
+    public int networkSize;
 
     /*
      * Initial settings. Creates the window.
@@ -157,6 +160,22 @@ public class Visualization extends PApplet {
      * Key pressing handler.
      */
     public void keyPressed() {
+        if(setUpStatus==0){
+            if(key == ENTER){
+                setUpStatus++;
+                networkSize = Integer.parseInt(numberOfNodesInput);
+                points = new PVector[networkSize];
+                for (int i = 0; i < networkSize; i++) {
+                    float ang = PI / 2 + i * (2 * PI / networkSize);
+                    float x = width / 2 + width/5 * cos(ang);
+                    float y = height / 2 - width/5 * sin(ang);
+                    points[i] = new PVector(x, y);
+                }
+            }
+            else if (Character.isDigit(key)){
+                numberOfNodesInput += key;
+            }
+        }
         if (key == 'p' || key == 'P') {
             save("screenshots/simulation" + screenshotCounter + ".png");
             fill(255);
@@ -196,7 +215,24 @@ public class Visualization extends PApplet {
      */
     public void draw() {
         background(255);
-        drawNetwork();
+        if(setUpStatus==0){
+            fill(0);
+            textAlign(CENTER, CENTER);
+            text("Enter desired number of nodes and press ENTER: "+numberOfNodesInput, width/2,height/3);
+        }
+        else if(setUpStatus==1){
+            for(int i=0;i<networkSize;i++){
+                fill(255);
+                ellipse(points[i].x, points[i].y, 20, 20);
+                fill(0);
+                textAlign(CENTER, CENTER);
+                text(i, points[i].x, points[i].y);
+            }
+        }
+        else{
+            drawNetwork();
+        }
+        
         if (recording) {
             saveFrame("recordings/simulation" + recordingCounter + "-######.png");
             fill(255, 0, 0);
