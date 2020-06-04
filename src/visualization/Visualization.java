@@ -13,14 +13,32 @@ import processing.core.PVector;
  */
 public class Visualization extends PApplet {
 
+    public final int SIZE = 0;
+    public final int HOPS = 1;
+    public final int TOPOLOGY = 2;
+    public final int LLEADER = 3;
+    public final int LDELTA = 4;
+    public final int GLEADER = 5;
+    public final int GDELTA = 6;
+
+    public final ActorSystem system = ActorSystem.create("system"); /* Akka actor system */
+
     public Network net; /* The network to draw */
     public PVector[] points;
     public boolean recording = false;
     public int screenshotCounter = 0;
     public int recordingCounter = 0;
-    public int setUpStatus = 0;
-    public String numberOfNodesInput = "";
+    
+    public int menuState = SIZE;
+    public int highlightedNode = 0;
+    public String input = "";
     public int networkSize;
+    public int[][] topologyGraph;
+    public int[] globalDeltas;
+    public int globalLeader = -1;
+    public int[] localDeltas;
+    public int[] localLeaders;
+    public int maxHops; 
 
     /*
      * Initial settings. Creates the window.
@@ -33,7 +51,7 @@ public class Visualization extends PApplet {
      * Initial setup. Creates the Akka system and the network.
      */
     public void setup() {
-        final ActorSystem system = ActorSystem.create("system"); /* Akka actor system */
+        /* final ActorSystem system = ActorSystem.create("system"); /* Akka actor system
 
         // Example 1: The graph we discussed in our meetings
 
@@ -45,11 +63,11 @@ public class Visualization extends PApplet {
         int[] localLeaders = { 2, 2, 2, 5, 5, 5 };
 
         // Exemple 2: Simpler 3 node clique, 0 is the only leader
-        /*
-         * int[][] topologyGraph = { { 0, 1, 1 }, { 1, 0, 1 }, { 1, 1, 0 } }; int[]
-         * globalDeltas = { 0, 1, 1 }; int globalLeader = 0; int[] localDeltas = { 0, 1,
-         * 1 }; int[] localLeaders = { 0, 0, 0 };
-         */
+        
+         int[][] topologyGraph = { { 0, 1, 1 }, { 1, 0, 1 }, { 1, 1, 0 } }; int[]
+         globalDeltas = { 0, 1, 1 }; int globalLeader = 0; int[] localDeltas = { 0, 1,
+         1 }; int[] localLeaders = { 0, 0, 0 };
+        
 
         net = new Network(system, topologyGraph, globalDeltas, globalLeader, localDeltas, localLeaders);
 
@@ -62,7 +80,7 @@ public class Visualization extends PApplet {
             x = width / 2 + r * cos(ang);
             y = height / 2 - r * sin(ang);
             points[i] = new PVector(x, y);
-        }
+        } */
     }
 
     /*
@@ -120,6 +138,7 @@ public class Visualization extends PApplet {
         float x = points[n.nodeId].x;
         float y = points[n.nodeId].y;
         fill(255);
+        stroke(0);
         if (n.nodeId == n.localLeaderId) {
             ellipse(x, y, 25, 25);
         }
@@ -131,6 +150,7 @@ public class Visualization extends PApplet {
         ellipse(x, y, 20, 20);
         fill(textColor);
         textAlign(CENTER, CENTER);
+        textSize(12);
         text(n.nodeId, x, y);
         fill(0);
         if (x >= width / 2) {
@@ -151,6 +171,10 @@ public class Visualization extends PApplet {
      * Draws every node
      */
     public void drawNetwork() {
+        textSize(12);
+        textAlign(LEFT, CENTER);
+        fill(0);
+        text("MAX HOPS: " + Network.MAX_HOPS, 20, 20);
         for (Node n : net.nodes) {
             drawNode(n);
         }
@@ -160,22 +184,71 @@ public class Visualization extends PApplet {
      * Key pressing handler.
      */
     public void keyPressed() {
-        if(setUpStatus==0){
+        if(menuState==SIZE){
             if(key == ENTER){
-                setUpStatus++;
-                networkSize = Integer.parseInt(numberOfNodesInput);
-                points = new PVector[networkSize];
-                for (int i = 0; i < networkSize; i++) {
-                    float ang = PI / 2 + i * (2 * PI / networkSize);
-                    float x = width / 2 + width/5 * cos(ang);
-                    float y = height / 2 - width/5 * sin(ang);
-                    points[i] = new PVector(x, y);
-                }
+                menuTransition();
             }
             else if (Character.isDigit(key)){
-                numberOfNodesInput += key;
+                input += key;
             }
         }
+        else if(menuState==HOPS){
+            if(key == ENTER){
+                menuTransition();
+            }
+            else if (Character.isDigit(key)){
+                input += key;
+            }
+        }
+        else if(menuState==TOPOLOGY && key == ENTER){
+            menuTransition();
+        }
+        else if(menuState==LLEADER && key == ENTER){
+            menuTransition();
+        }
+        else if(menuState == LDELTA){
+            if(key == ENTER){
+                menuTransition();
+            }
+            else if(key == CODED){
+                if(keyCode == LEFT){
+                    localDeltas[highlightedNode] = Integer.parseInt(input);
+                    input = "";
+                    highlightedNode = (highlightedNode+1)%networkSize;
+                }
+                else if(keyCode == RIGHT){
+                    localDeltas[highlightedNode] = Integer.parseInt(input);
+                    input = "";
+                    highlightedNode--;
+                    highlightedNode = highlightedNode<0?networkSize+highlightedNode:highlightedNode;
+                }
+            }
+            else if(Character.isDigit(key)){
+                input += key;
+            }
+        }
+        else if(menuState == GDELTA){
+            if(key == ENTER){
+                menuTransition();
+            }
+            else if(key == CODED){
+                if(keyCode == LEFT){
+                    globalDeltas[highlightedNode] = Integer.parseInt(input);
+                    input = "";
+                    highlightedNode = (highlightedNode+1)%networkSize;
+                }
+                else if(keyCode == RIGHT){
+                    globalDeltas[highlightedNode] = Integer.parseInt(input);
+                    input = "";
+                    highlightedNode--;
+                    highlightedNode = highlightedNode<0?networkSize+highlightedNode:highlightedNode;
+                }
+            }
+            else if(Character.isDigit(key)){
+                input += key;
+            }
+        }
+
         if (key == 'p' || key == 'P') {
             save("screenshots/simulation" + screenshotCounter + ".png");
             fill(255);
@@ -189,24 +262,226 @@ public class Visualization extends PApplet {
         }
     }
 
-    public void mousePressed() {
+    public PVector mouseOverEdge(){
         PVector mouse = new PVector(mouseX, mouseY);
         PVector p1;
         PVector p2;
-        for (int i = 0; i < net.nodes.length; i++) {
+        for (int i = 0; i < networkSize; i++) {
             p1 = points[i];
-            for (int j = 0; j < net.nodes.length; j++) {
+            for (int j = 0; j < networkSize; j++) {
                 if (i != j) {
                     p2 = points[j];
                     if (pointBetweenPoints(p1, p2, mouse)) {
-                        if (mouseButton == LEFT)
-                            net.dropChannel(i, j);
-                        if (mouseButton == RIGHT)
-                            net.remakeChannel(i, j);
+                        return new PVector(i,j);
                     }
                 }
             }
         }
+        return null;
+    }
+
+    public int mouseOverNode(){
+        PVector mouse = new PVector(mouseX, mouseY);
+        PVector p;
+        for(int i=0;i<networkSize;i++){
+            p = points[i];
+            if(mouse.dist(p) <= 10){
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public void mousePressed() {
+        PVector ij;
+        int n;
+        if((ij = mouseOverEdge())!=null){
+            int i = (int) ij.x;
+            int j = (int) ij.y;
+            if(menuState == TOPOLOGY && mouseButton == LEFT){
+                topologyGraph[i][j] = 1 - topologyGraph[i][j]; 
+                topologyGraph[j][i] = 1 - topologyGraph[j][i]; 
+            }
+            else if(menuState > GDELTA){
+                if (mouseButton == LEFT){
+                    topologyGraph[i][j] = 1 - topologyGraph[i][j]; 
+                    topologyGraph[j][i] = 1 - topologyGraph[j][i];
+                    if(topologyGraph[i][j] == 1){
+                        net.dropChannel(i, j);
+                    } else{
+                        net.remakeChannel(i,j);
+                    }
+                }
+            }
+        }
+        if((n = mouseOverNode())>=0){
+            if(menuState == LLEADER && mouseButton == LEFT){
+                localLeaders[highlightedNode] = n;
+                highlightedNode = (highlightedNode+1)%networkSize;  
+            }
+            if(menuState == GLEADER && mouseButton == LEFT){
+                globalLeader = n;
+                menuTransition();
+            }
+        }
+    }
+
+    public void menuTransition(){
+        switch (menuState) {
+            case SIZE:
+                menuState++;
+                networkSize = Integer.parseInt(input);
+                input = "";
+                points = new PVector[networkSize];
+                topologyGraph = new int[networkSize][networkSize];
+                globalDeltas = new int[networkSize];
+                localDeltas = new int[networkSize];
+                localLeaders = new int[networkSize];
+                float ang, x, y;
+                for (int i = 0; i < networkSize; i++) {
+                    ang = PI / 2 + i * (2 * PI / networkSize);
+                    x = width / 2 + width/5 * cos(ang);
+                    y = height / 2 - width/5 * sin(ang);
+                    points[i] = new PVector(x, y);
+                    globalDeltas[i] = -1;
+                    localDeltas[i] = -1;
+                    localLeaders[i] = -1;
+                    for(int j=0;j<networkSize;j++){
+                        topologyGraph[i][j] = 0;
+                    }
+                }
+                break;
+            case HOPS:
+                menuState++;
+                maxHops = Integer.parseInt(input);
+                input = "";
+                break;
+            case TOPOLOGY:
+                menuState++;
+                break;
+            case LLEADER:
+                menuState++;
+                highlightedNode = 0;
+                input = "";
+                break;
+            case LDELTA:
+                menuState++;
+                break;
+            case GLEADER:
+                menuState++;
+                highlightedNode = 0;
+                input = "";
+                break;
+            case GDELTA:
+                menuState++;
+                net = new Network(system, topologyGraph, globalDeltas, globalLeader, localDeltas, localLeaders, maxHops);
+                break;
+            default:
+                break;
+        }
+    }
+
+    public boolean nodeIsLocalLeader(int i){
+        for(int leader: localLeaders){
+            if(leader == i){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void startMenu(){
+        PVector p1, p2;
+        if(menuState==SIZE){
+            fill(0);
+            textAlign(CENTER, CENTER);
+            textSize(20);
+            text("Enter desired number of nodes and press ENTER:", width/2,height/10);
+            textSize(50);
+            text(input, width/2, height/2);
+        }
+        else if(menuState == HOPS){
+            fill(0);
+            textAlign(CENTER, CENTER);
+            textSize(20);
+            text("Enter desires number for MAX_HOPS and press ENTER:", width/2,height/10);
+            textSize(50);
+            text(input, width/2, height/2);
+        }
+        else{
+            textSize(12);
+            textAlign(LEFT, CENTER);
+            fill(0);
+            text("MAX HOPS: " + maxHops, 20, 20);
+            for(int i=0;i<networkSize;i++){
+                p1 = points[i];
+                for(int j=0;j<networkSize;j++){
+                    if(topologyGraph[i][j]==1){
+                        p2 = points[j];
+                        stroke(0);
+                        line(p1.x, p1.y, p2.x, p2.y);
+                    }
+                }
+            }
+            for(int i=0;i<networkSize;i++){
+                int nodeColor = 255;
+                int textColor = 0;
+                p1 = points[i];
+                fill(nodeColor);
+                if(nodeIsLocalLeader(i)){
+                    ellipse(p1.x, p1.y, 25, 25);
+                }
+                if(i==globalLeader){
+                    nodeColor = 0;
+                    textColor = 255;
+                }
+                fill(nodeColor);
+                if((menuState == LLEADER || menuState == LDELTA || menuState == GDELTA) && i==highlightedNode){
+                    fill(0,255,0);
+                }
+                ellipse(p1.x, p1.y, 20, 20);
+                fill(textColor);
+                textAlign(CENTER, CENTER);
+                textSize(12);
+                text(i, p1.x, p1.y);
+                if((menuState == LDELTA || menuState == GDELTA) && i==highlightedNode){
+                    if (p1.x >= width / 2) {
+                        textAlign(LEFT, CENTER);
+                        fill(0);
+                        text(input, p1.x + 15, p1.y);
+                    } else {
+                        textAlign(RIGHT, CENTER);
+                        fill(0);
+                        text(input, p1.x - 15, p1.y);
+                    }
+                }
+            }
+            if(menuState==TOPOLOGY){
+                textSize(20);
+                textAlign(CENTER, CENTER);
+                text("Use your mouse to draw the topology.\nPress ENTER when done", width/2, height/10);
+            }
+            else if(menuState==LLEADER){
+                textSize(20);
+                textAlign(CENTER, CENTER);
+                text("Click on the local leader of the highlighted node.\nPress ENTER when done", width/2, height/10);
+            }
+            else if(menuState==LDELTA){
+                textSize(20);
+                textAlign(CENTER, CENTER);
+                text("Enter the local delta of the highlighted node.\nNavigate using <- and ->. Press ENTER when done", width/2, height/10);
+            }
+            else if(menuState == GLEADER){
+                textSize(20);
+                textAlign(CENTER, CENTER);
+                text("Click on the global leader.", width/2, height/10);
+            }
+            else if(menuState == GDELTA){
+                textSize(20);
+                textAlign(CENTER, CENTER);
+                text("Enter the global delta of the highlighted node.\nNavigate using <- and ->. Press ENTER when done", width/2, height/10);
+            }
+        } 
     }
 
     /*
@@ -215,22 +490,41 @@ public class Visualization extends PApplet {
      */
     public void draw() {
         background(255);
-        if(setUpStatus==0){
-            fill(0);
-            textAlign(CENTER, CENTER);
-            text("Enter desired number of nodes and press ENTER: "+numberOfNodesInput, width/2,height/3);
-        }
-        else if(setUpStatus==1){
-            for(int i=0;i<networkSize;i++){
-                fill(255);
-                ellipse(points[i].x, points[i].y, 20, 20);
-                fill(0);
-                textAlign(CENTER, CENTER);
-                text(i, points[i].x, points[i].y);
+        PVector edge = mouseOverEdge();
+        int node = mouseOverNode();
+
+        if(menuState <= GDELTA){
+            if(menuState == TOPOLOGY){
+                if(edge != null){
+                    PVector p1 = points[(int) edge.x];
+                    PVector p2 = points[(int) edge.y];
+                    stroke(51); 
+                    line(p1.x,p1.y,p2.x,p2.y);
+                }
+            }
+            startMenu();
+            if(menuState == LLEADER || menuState == GLEADER){
+                if(node >= 0){
+                    PVector p = points[node];
+                    fill(255,255,0,85);
+                    ellipse(p.x, p.y, 20, 20);
+                }
             }
         }
         else{
+            if(edge != null && topologyGraph[(int) edge.x][(int) edge.y]==0){
+                PVector p1 = points[(int) edge.x];
+                PVector p2 = points[(int) edge.y];
+                stroke(51); 
+                line(p1.x,p1.y,p2.x,p2.y);
+            }
             drawNetwork();
+            if(edge != null && topologyGraph[(int) edge.x][(int) edge.y]==1){
+                PVector p1 = points[(int) edge.x];
+                PVector p2 = points[(int) edge.y];
+                stroke(255,0,0,85); 
+                line(p1.x,p1.y,p2.x,p2.y);
+            }
         }
         
         if (recording) {

@@ -11,6 +11,9 @@ import events.SetUp;
 */
 public class Network {
 
+    public static int MAX_HOPS; /* Constant maximum number of hops between any node and its local leader */
+
+
     public Node[] nodes; /* Set of computing nodes */
     private ActorRef[][] channels; /* Set of communication channels */
 
@@ -36,7 +39,8 @@ public class Network {
      * local leader for node i
      */
     public Network(ActorSystem system, int[][] topologyGraph, int[] globalDeltas, int globalLeader, int[] localDeltas,
-            int[] localLeaders) {
+            int[] localLeaders, int maxHops) {
+        Network.MAX_HOPS = maxHops;
         nodes = new Node[topologyGraph.length];
         channels = new ActorRef[topologyGraph.length][topologyGraph.length];
 

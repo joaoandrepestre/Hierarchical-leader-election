@@ -92,7 +92,6 @@ class NodeActor extends UntypedAbstractActor {
  * messages from channels and runs the algorithm by handling this events
  */
 public class Node {
-    private final int MAX_HOPS = 2; /* Constant maximum number of hops between any node and its local leader */
 
     public int nodeId; /* Id of the node */
     public ActorRef[] forming; /* Set of channels that are up but that haven't sent any messages yet */
@@ -233,11 +232,11 @@ public class Node {
         addNeighbor(h.nodeId);
         Height myOldHeight = heights[nodeId].copy();
         ReferenceLevel neighborsRL = h.rl;
-        if (myOldHeight.globalLeaderPair.compareTo(h.globalLeaderPair) == 0) { // same global leaders
-            if (myOldHeight.localLeaderPair.compareTo(h.localLeaderPair) == 0) { // same local leaders
+        if (myOldHeight.localLeaderPair.compareTo(h.localLeaderPair) == 0 ) { // same local leaders
+            if (myOldHeight.globalLeaderPair.compareTo(h.globalLeaderPair) == 0) { // same global leaders
                 if (isSink()) {
                     //log.info("\n[{}]: Is sink...", getSelf().path().name());
-                    if (h.rl.reflected == 0 && h.rl.localHops > MAX_HOPS) { // local search has gone too far
+                    if (h.rl.reflected == 0 && h.rl.localHops > Network.MAX_HOPS) { // local search has gone too far
                         //log.info("\n[{}]: Local search gone too far, reflecting...", getSelf().path().name());
                         heights[nodeId].reflectReferenceLevel(h.rl);
                     } else if (nodeId == localLeaderId && h.rl.localHops > 0) { // local search found global leader
@@ -279,19 +278,19 @@ public class Node {
                         propagateLargestRL();
                     }
                 }
-            } else { // different local leaders
-                if (nodeId != localLeaderId && !localLeadersInNeighborhood()) {
-                    //log.info("\n[{}]: Different local leaders, leaders far away, electing self...",
-                    //        getSelf().path().name());
-                    electSelfLocal();
-                } else {
-                    //log.info("\n[{}]: Different local leaders, checking priority...", getSelf().path().name());
-                    adoptLLPIfPriority(h.nodeId);
-                }
+            } else { // different global leaders
+                //log.info("\n[{}]: Different global leaders, checking priority...", getSelf().path().name());
+                adoptGLPIfPriority(h.nodeId);
             }
-        } else { // different global leaders
-            //log.info("\n[{}]: Different global leaders, checking priority...", getSelf().path().name());
-            adoptGLPIfPriority(h.nodeId);
+        } else { // different local leaders
+            if (nodeId != localLeaderId && !localLeadersInNeighborhood()) {
+                //log.info("\n[{}]: Different local leaders, leaders far away, electing self...",
+                //        getSelf().path().name());
+                electSelfLocal();
+            } else {
+                //log.info("\n[{}]: Different local leaders, checking priority...", getSelf().path().name());
+                adoptLLPIfPriority(h.nodeId);
+            }
         }
 
         if (myOldHeight.compareTo(heights[nodeId]) != 0) {
@@ -323,7 +322,7 @@ public class Node {
      */
     private boolean localLeadersInNeighborhood() {
         for (Height h : heights) {
-            if (h != null && h != heights[nodeId] && h.localDelta >= 0 && h.localDelta + 1 <= MAX_HOPS) {
+            if (h != null && h != heights[nodeId] && h.localDelta >= 0 && h.localDelta + 1 <= Network.MAX_HOPS) {
                 return true;
             }
         }
@@ -433,7 +432,7 @@ public class Node {
             heights[nodeId].rl = h.rl.copy();
             heights[nodeId].globalDelta = h.globalDelta+1;
             heights[nodeId].globalLeaderPair = h.globalLeaderPair.copy();
-            if(h.localDelta + 1 <= MAX_HOPS){
+            if(h.localDelta + 1 <= Network.MAX_HOPS){
                 adoptLLPIfPriority(neighborId);
             }
             globalLeaderId = h.globalLeaderPair.leaderId;
@@ -453,14 +452,17 @@ public class Node {
         if (h.localDelta >= 0 && h.globalDelta >= 0) {
             if ((heights[nodeId].localDelta < 0) 
                     || (h.globalDelta + 1 < heights[nodeId].globalDelta)
-                    || ((h.globalDelta + 1 == heights[nodeId].globalDelta)
+                    || ((h.globalDelta + 1 >= heights[nodeId].globalDelta)
                             && (h.localDelta + 1 < heights[nodeId].localDelta))
-                    || ((h.globalDelta + 1 == heights[nodeId].globalDelta)
-                            && (h.localDelta + 1 == heights[nodeId].localDelta)
+                    || ((h.globalDelta + 1 >= heights[nodeId].globalDelta)
+                            && (h.localDelta + 1 >= heights[nodeId].localDelta)
                             && h.localLeaderPair.compareTo(heights[nodeId].localLeaderPair) < 0)) {
                 heights[nodeId].rl = h.rl.copy();
+                heights[nodeId].globalDelta = h.globalDelta+1;
+                heights[nodeId].globalLeaderPair = h.globalLeaderPair.copy();
                 heights[nodeId].localDelta = h.localDelta+1;
                 heights[nodeId].localLeaderPair = h.localLeaderPair.copy();
+                globalLeaderId = h.globalLeaderPair.leaderId;
                 localLeaderId = h.localLeaderPair.leaderId;
             }
         } else {
