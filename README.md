@@ -6,15 +6,11 @@ Simulator of an Assynchronous Leader Election Algorithm for Dynamic Networks usi
 
 This project uses ant to build and run.
 
-- Download the repository
-- ant build to compile
-- ant dist to create a runnable jar file
+- Download or clone the repository
+- java -jar dist/HierarchicalLeaderElection.jar to run the distribution
+- ant build to compile locally
+- ant dist to create a runnable distribution jar file
 - ant run to run the program
-
-OR
-
-- Download the jar file in dist/
-- java -jar HierarchicalLeaderElection.jar to run it
 
 **The start menu**
 
@@ -28,6 +24,12 @@ When the simulator starts it will open a setup menu so you can set the initial s
 - Determining the number of hops between each node and the global leader
 
 After completing these steps, the simulator is ready to run!
+You should see a network similar to this:
+![Example network](samplenetwork.png)
+
+- A node has its ID inside it and its height and local clock next to it
+- A node with a circle around it is a local leader
+- A black node is a global leader
 
 **Dependencies**
 
