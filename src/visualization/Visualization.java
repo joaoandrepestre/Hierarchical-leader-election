@@ -50,7 +50,7 @@ public class Visualization extends PApplet {
      * Initial settings. Creates the window.
      */
     public void settings() {
-        size(640, 480);
+        size(800, 600);
     }
 
     /*

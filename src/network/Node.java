@@ -186,7 +186,7 @@ public class Node {
             //log.info("\n[{}]: No neighbors, electing self...", getSelf().path().name());
             electSelfGlobal();
             sendToForming(heights[nodeId]);
-        } else if (isSink()) {
+        } else if (isSink() && nodeId != globalLeaderId) {
             if (nodeId == localLeaderId) {
                 //log.info("\n[{}]: Is a sink and local leader, searching global", getSelf().path().name());
                 heights[nodeId].startNewReferenceLevelGlobal(causalClock, nodeId);
@@ -195,6 +195,12 @@ public class Node {
                 heights[nodeId].startNewReferenceLevelLocal(causalClock, nodeId);
             }
             sendToAll(heights[nodeId]);
+        } else{
+            Height myOldHeight = heights[nodeId].copy();
+            updateLocalDelta();
+            if (myOldHeight.compareTo(heights[nodeId]) != 0) {
+                sendToAll(heights[nodeId]);
+            }
         }
     }
 
@@ -232,65 +238,76 @@ public class Node {
         addNeighbor(h.nodeId);
         Height myOldHeight = heights[nodeId].copy();
         ReferenceLevel neighborsRL = h.rl;
-        if (myOldHeight.localLeaderPair.compareTo(h.localLeaderPair) == 0 ) { // same local leaders
-            if (myOldHeight.globalLeaderPair.compareTo(h.globalLeaderPair) == 0) { // same global leaders
+        if (myOldHeight.globalLeaderPair.compareTo(h.globalLeaderPair) == 0) { // same global leaders
+            if ((myOldHeight.localLeaderPair.compareTo(h.localLeaderPair) == 0) || (neighborsRL.timestamp>0 && neighborsRL.localHops == 0) ) { // same local leaders
                 if (isSink()) {
                     //log.info("\n[{}]: Is sink...", getSelf().path().name());
-                    if (h.rl.reflected == 0 && h.rl.localHops > Network.MAX_HOPS) { // local search has gone too far
-                        //log.info("\n[{}]: Local search gone too far, reflecting...", getSelf().path().name());
-                        heights[nodeId].reflectReferenceLevel(h.rl);
-                    } else if (nodeId == localLeaderId && h.rl.localHops > 0) { // local search found global leader
+                    if (nodeId != globalLeaderId && nodeId == localLeaderId && h.rl.localHops > 0) { // local search found global leader
                         //log.info("\n[{}]: Local search found a local leader, searching global...",
                         //        getSelf().path().name());
                         heights[nodeId].startNewReferenceLevelGlobal(causalClock, nodeId);
-                    } else if (neighborsHaveSameRL(neighborsRL)) { // neighbors have the same RL
-                        //log.info("\n[{}]: All neighbors have the same RL (dead end)...", getSelf().path().name());
-                        if (neighborsRL.timestamp > 0 && neighborsRL.reflected == 0) { // search hasn't been reflected
-                                                                                       // yet
-                            //log.info("\n[{}]: The search has not been reflected, reflecting it...",
-                            //        getSelf().path().name());
-                            heights[nodeId].reflectReferenceLevel(h.rl);
-                        } else if (neighborsRL.timestamp > 0 && neighborsRL.reflected == 1
-                                && neighborsRL.originId == nodeId) { // search has been reflected and it was started by
-                                                                     // this node
-                            //log.info("\n[{}]: The reflected search has reached the origin, electing self...",
-                            //        getSelf().path().name());
-
-                            if (neighborsRL.localHops == 0) {
-                                electSelfGlobal();
-                            } else {
-                                electSelfLocal();
-                            }
-                        } else { // the search has been relfected and this node didn't start it
-                            //log.info(
-                            //        "\n[{}]: There is no search happening, or a reflected search reached a second dead end, starting new search...",
-                            //        getSelf().path().name());
-
-                            if (nodeId == localLeaderId) {
-                                heights[nodeId].startNewReferenceLevelGlobal(causalClock, nodeId);
-                            } else {
-                                heights[nodeId].startNewReferenceLevelLocal(causalClock, nodeId);
-                            }
-                        }
-                    } else { // neighbors have different RL
-                        //log.info("\n[{}]: Neighbors have different RL, propagating largest...",
-                        //        getSelf().path().name());
-                        propagateLargestRL();
                     }
+                    if(nodeId != globalLeaderId){
+                        if (h.rl.reflected == 0 && h.rl.localHops > Network.MAX_HOPS) { // local search has gone too far
+                            //log.info("\n[{}]: Local search gone too far, reflecting...", getSelf().path().name());
+                            heights[nodeId].reflectReferenceLevel(h.rl);
+                        }  else if (neighborsHaveSameRL(neighborsRL)) { // neighbors have the same RL
+                            //log.info("\n[{}]: All neighbors have the same RL (dead end)...", getSelf().path().name());
+                            if (neighborsRL.timestamp > 0 && neighborsRL.reflected == 0) { // search hasn't been reflected
+                                                                                        // yet
+                                //log.info("\n[{}]: The search has not been reflected, reflecting it...",
+                                //        getSelf().path().name());
+                                heights[nodeId].reflectReferenceLevel(h.rl);
+                            } else if (neighborsRL.timestamp > 0 && neighborsRL.reflected == 1
+                                    && neighborsRL.originId == nodeId) { // search has been reflected and it was started by
+                                                                        // this node
+                                //log.info("\n[{}]: The reflected search has reached the origin, electing self...",
+                                //        getSelf().path().name());
+
+                                if (neighborsRL.localHops == 0) {
+                                    electSelfGlobal();
+                                } else {
+                                    electSelfLocal();
+                                }
+                            } else { // the search has been relfected and this node didn't start it
+                                //log.info(
+                                //        "\n[{}]: There is no search happening, or a reflected search reached a second dead end, starting new search...",
+                                //        getSelf().path().name());
+
+                                if (nodeId == localLeaderId) {
+                                    heights[nodeId].startNewReferenceLevelGlobal(causalClock, nodeId);
+                                } else {
+                                    heights[nodeId].startNewReferenceLevelLocal(causalClock, nodeId);
+                                }
+                            }
+                        } else { // neighbors have different RL
+                            //log.info("\n[{}]: Neighbors have different RL, propagating largest...",
+                            //        getSelf().path().name());
+                            propagateLargestRL();
+                        }
+                    }
+                } else{ // is not a sink
+                    // the search is done send a message back with your height
+                    if((myOldHeight.localDelta>0 && myOldHeight.globalDelta>0) || nodeId == localLeaderId){
+                        if(h.localDelta <=0 || h.globalDelta <=0)
+                            sendMessage(neighbors[h.nodeId], heights[nodeId]);
+                    }
+                    // the search was done and you received a new height
+                    updateLocalDelta();
                 }
-            } else { // different global leaders
-                //log.info("\n[{}]: Different global leaders, checking priority...", getSelf().path().name());
-                adoptGLPIfPriority(h.nodeId);
+            } else { // different local leaders
+                if (!localLeadersInNeighborhood() && nodeId != localLeaderId) {
+                    //log.info("\n[{}]: Different local leaders, leaders far away, electing self...",
+                    //        getSelf().path().name());
+                    electSelfLocal();
+                } else {
+                    //log.info("\n[{}]: Different local leaders, checking priority...", getSelf().path().name());
+                    adoptLLPIfPriority(h.nodeId);
+                }
             }
-        } else { // different local leaders
-            if (nodeId != localLeaderId && !localLeadersInNeighborhood()) {
-                //log.info("\n[{}]: Different local leaders, leaders far away, electing self...",
-                //        getSelf().path().name());
-                electSelfLocal();
-            } else {
-                //log.info("\n[{}]: Different local leaders, checking priority...", getSelf().path().name());
-                adoptLLPIfPriority(h.nodeId);
-            }
+        } else { // different global leaders
+            //log.info("\n[{}]: Different global leaders, checking priority...", getSelf().path().name());
+            adoptGLPIfPriority(h.nodeId);
         }
 
         if (myOldHeight.compareTo(heights[nodeId]) != 0) {
@@ -338,7 +355,7 @@ public class Node {
      * @return false otherwise
      */
     private boolean isSink() {
-        boolean isSink = (nodeId != globalLeaderId);
+        boolean isSink = true;
         for (Height h : heights) {
             if (h != null && h != heights[nodeId]) {
                 isSink = isSink && (h.globalLeaderPair.compareTo(heights[nodeId].globalLeaderPair) == 0)
@@ -452,9 +469,9 @@ public class Node {
         if (h.localDelta >= 0 && h.globalDelta >= 0) {
             if ((heights[nodeId].localDelta < 0) 
                     || (h.globalDelta + 1 < heights[nodeId].globalDelta)
-                    || ((h.globalDelta + 1 >= heights[nodeId].globalDelta)
+                    || ((h.globalDelta + 1 == heights[nodeId].globalDelta)
                             && (h.localDelta + 1 < heights[nodeId].localDelta))
-                    || ((h.globalDelta + 1 >= heights[nodeId].globalDelta)
+                    || ((h.globalDelta + 1 == heights[nodeId].globalDelta)
                             && (h.localDelta + 1 >= heights[nodeId].localDelta)
                             && h.localLeaderPair.compareTo(heights[nodeId].localLeaderPair) < 0)) {
                 heights[nodeId].rl = h.rl.copy();
@@ -468,6 +485,48 @@ public class Node {
         } else {
             sendMessage(neighbors[neighborId], heights[nodeId]);
         }
+    }
+
+    /* 
+     * Updates its global delta to the shortest path to the global leader
+     */
+    private void updateGlobalDelta(){
+        int delta = heights[nodeId].globalDelta>=0?heights[nodeId].globalDelta+1:neighbors.length;
+        for(Height h: heights){
+            if(h != null && h != heights[nodeId] && h.globalDelta>=0){
+                if(h.globalLeaderPair.leaderId == globalLeaderId && h.globalDelta < delta){
+                    delta = h.globalDelta;
+                }
+            }
+        }
+        heights[nodeId].globalDelta = delta+1;
+        if(nodeId == globalLeaderId){
+            heights[nodeId].globalDelta = 0;
+        }
+    }
+
+    /* 
+     * Updates its local delta to the shortest path to its local leader. Updates global delta if needed.
+     * If the local leader is too far, elect self as local leader
+     */
+    private void updateLocalDelta(){
+        int delta = heights[nodeId].localDelta>=0?heights[nodeId].localDelta+1:Network.MAX_HOPS;
+        for(Height h: heights){
+            if(h != null && h != heights[nodeId] && h.localDelta>=0){
+                if(h.localLeaderPair.leaderId == localLeaderId && h.localDelta < delta){
+                    delta = h.localDelta;
+                }
+            }
+        }
+        if(nodeId == localLeaderId)
+            delta = -1;
+        if(delta+1 > Network.MAX_HOPS){
+            electSelfLocal();
+        }
+        else{
+            heights[nodeId].localDelta = delta+1;
+        }
+        updateGlobalDelta();
     }
 
     /*
