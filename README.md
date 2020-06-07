@@ -45,4 +45,4 @@ All dependencies are included in the lib directory and bundled in the runnable j
 
 - Akka: https://akka.io/
 - Processing: https://processing.org/
-- The algorithm: coming soon...
+- The algorithm: [Paper describing the algorithm](SLR209-HierarchicalLeaderElection.pdf)
